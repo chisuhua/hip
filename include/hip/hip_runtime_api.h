@@ -34,6 +34,9 @@ THE SOFTWARE.
 #include <string.h>  // for getDeviceProp
 #include <hip/hip_common.h>
 
+// TODO there are redefinition be/wo cuda open's hip_host_runtime_api.h, I comment out below
+/*
+ * redefinition
 enum {
     HIP_SUCCESS = 0,
     HIP_ERROR_INVALID_VALUE,
@@ -71,6 +74,7 @@ typedef struct {
     unsigned has3dGrid : 1;              ///< Grid and group dims are 3D (rather than 2D).
     unsigned hasDynamicParallelism : 1;  ///< Dynamic parallelism.
 } hipDeviceArch_t;
+*/
 
 
 //---
@@ -80,6 +84,8 @@ typedef struct {
  * hipDeviceProp
  *
  */
+/*
+ * redefinition
 typedef struct hipDeviceProp_t {
     char name[256];            ///< Device name.
     size_t totalGlobalMem;     ///< Size of global memory region (in bytes).
@@ -116,11 +122,13 @@ typedef struct hipDeviceProp_t {
     int gcnArch;                              ///< AMD GCN Arch Value. Eg: 803, 701
     int integrated;            ///< APU vs dGPU
 } hipDeviceProp_t;
-
+*/
 
 /**
  * Memory type (for pointer attributes)
  */
+/*
+ * redefinition
 typedef enum hipMemoryType {
     hipMemoryTypeHost,    ///< Memory is physically located on host
     hipMemoryTypeDevice,  ///< Memory is physically located on device. (see deviceId for specific
@@ -129,20 +137,25 @@ typedef enum hipMemoryType {
                          ///< device)
     hipMemoryTypeUnified  ///< Not used currently
 }hipMemoryType;
+*/
 
 
 /**
  * Pointer attributes
  */
+/*
+ * redefinition
 typedef struct hipPointerAttribute_t {
     enum hipMemoryType memoryType;
     int device;
     void* devicePointer;
     void* hostPointer;
     int isManaged;
-    unsigned allocationFlags; /* flags specified when memory was allocated*/
-    /* peers? */
-} hipPointerAttribute_t;
+*/
+//    unsigned allocationFlags; /* flags specified when memory was allocated*/
+//    /* peers? */
+//} hipPointerAttribute_t;
+
 
 
 // hack to get these to show up in Doxygen:
@@ -168,6 +181,8 @@ typedef struct hipPointerAttribute_t {
 // Developer note - when updating these, update the hipErrorName and hipErrorString functions in
 // NVCC and HCC paths Also update the hipCUDAErrorTohipError function in NVCC path.
 
+/*
+ * redefinition
 typedef enum __HIP_NODISCARD hipError_t {
     hipSuccess = 0,  ///< Successful completion.
     hipErrorOutOfMemory = 2,
@@ -248,6 +263,7 @@ typedef enum __HIP_NODISCARD hipError_t {
         1081,    ///< Produced when the kernel calls assert.
     hipErrorTbd  ///< Marker that more error codes are needed.
 } hipError_t;
+*/
 
 #undef __HIP_NODISCARD
 
@@ -256,6 +272,8 @@ typedef enum __HIP_NODISCARD hipError_t {
  * @enum
  * @ingroup Enumerations
  */
+/*
+ * redefinition
 typedef enum hipDeviceAttribute_t {
     hipDeviceAttributeMaxThreadsPerBlock,       ///< Maximum number of threads per block.
     hipDeviceAttributeMaxBlockDimX,             ///< Maximum x-dimension of a block.
@@ -299,6 +317,7 @@ enum hipComputeMode {
     hipComputeModeProhibited = 2,
     hipComputeModeExclusiveProcess = 3
 };
+*/
 
 /**
  *     @}
@@ -324,6 +343,8 @@ enum hipComputeMode {
  *
  * @see hipMalloc
  */
+/*
+ * redefinition
 #if defined(__cplusplus) && !defined(__HIP_DISABLE_CPP_FUNCTIONS__)
 template <class T>
 static inline hipError_t hipMalloc(T** devPtr, size_t size) {
@@ -338,5 +359,6 @@ static inline hipError_t hipHostMalloc(T** ptr, size_t size,
     return hipHostMalloc((void**)ptr, size, flags);
 }
 #endif
+*/
 
 #endif

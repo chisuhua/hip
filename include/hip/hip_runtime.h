@@ -49,19 +49,80 @@ THE SOFTWARE.
 #include <thread>
 #endif
 
+// #define __hcc_workweek__ 18800
+// #define __HIP__
 
-#include <hip/hip_common.h>
+#define __host__
 
-#if defined(__HIP_PLATFORM_HCC__) && !defined(__HIP_PLATFORM_NVCC__)
-#include <hip/hcc_detail/hip_runtime.h>
-#elif defined(__HIP_PLATFORM_NVCC__) && !defined(__HIP_PLATFORM_HCC__)
-#include <hip/nvcc_detail/hip_runtime.h>
-#else
-#error("Must define exactly one of __HIP_PLATFORM_HCC__ or __HIP_PLATFORM_NVCC__");
+typedef struct dim3 {
+    uint32_t x;  ///< x
+    uint32_t y;  ///< y
+    uint32_t z;  ///< z
+#ifdef __cplusplus
+    dim3(uint32_t _x = 1, uint32_t _y = 1, uint32_t _z = 1) : x(_x), y(_y), z(_z){};
+#endif
+} dim3;
+
+#define __device__
+#define __CUDA__
+// #include "cuda_open/cuda_open.h"
+#include "cuda_open/vector_types.h"
+
+// #include <hip/clang_detail/hip_runtime.h>
+// copy some from hip/clang_detail/hip_runtime.h
+extern int HIP_TRACE_API;
+
+
+// #include <hip/hip_common.h>
+// 
+// #include <hip/clang_detail/hip_runtime.h>
+
+// #if defined(__HIP_PLATFORM_HCC__) && !defined(__HIP_PLATFORM_NVCC__)
+// #include <hip/hcc_detail/hip_runtime.h>
+// #elif defined(__HIP_PLATFORM_NVCC__) && !defined(__HIP_PLATFORM_HCC__)
+// #include <hip/nvcc_detail/hip_runtime.h>
+// #else
+// #error("Must define exactly one of __HIP_PLATFORM_HCC__ or __HIP_PLATFORM_NVCC__");
+// #endif
+
+// Implementation of malloc and free device functions.
+// HIP heap is implemented as a global array with fixed size. Users may define
+// __HIP_SIZE_OF_PAGE and __HIP_NUM_PAGES to have a larger heap.
+
+
+// Size of page in bytes.
+#ifndef __HIP_SIZE_OF_PAGE
+#define __HIP_SIZE_OF_PAGE 64
 #endif
 
+// Total number of pages
+#ifndef __HIP_NUM_PAGES
+#define __HIP_NUM_PAGES (16 * 64 * 64)
+#endif
 
-#include <hip/hip_runtime_api.h>
-#include <hip/hip_vector_types.h>
+#define __HIP_SIZE_OF_HEAP (__HIP_NUM_PAGES * __HIP_SIZE_OF_PAGE)
+
+/*
+typedef enum hipMemoryType {
+    hipMemoryTypeHost,    ///< Memory is physically located on host
+    hipMemoryTypeDevice,  ///< Memory is physically located on device. (see deviceId for specific
+                          ///< device)
+    hipMemoryTypeArray,  ///< Array memory, physically located on device. (see deviceId for specific
+                         ///< device)
+    hipMemoryTypeUnified  ///< Not used currently
+}hipMemoryType;
+*/
+
+// this file is from cuda_open include directory
+#include "hip/hip_host_runtime_api.h"
+// copy from hcc_detail/hip_runtime_api.h
+// hipError_t hipFuncGetAttributes(hipFuncAttributes* attr, const void* func);
+
+// #include <hip/hip_runtime_api.h>
+// #include <hip/clang_detail/hip_vector_types.h>
+// #define __device__
+// #define __CUDA__
+// #include "cuda_open/cuda_open.h"
+// #include "cuda_open/vector_types.h"
 
 #endif
