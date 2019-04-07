@@ -22,15 +22,19 @@ THE SOFTWARE.
 
 // Internal header, do not percolate upwards.
 #include "hip_hcc_internal.h"
-#include "hc.hpp"
+
+// TODO schi #include "hc.hpp"
+#include "inc/csq_accelerator.h"
 #include "trace_helper.h"
 
 #include <iostream>
 #include <sstream>
 
+// TODO schi change csq:: to csq::
+
 namespace hip_impl
 {
-    hc::accelerator_view lock_stream_hip_(
+    csq::accelerator_view lock_stream_hip_(
         hipStream_t& stream, void*& locked_stream)
     {   // This allocated but does not take ownership of locked_stream. If it is
         // not deleted elsewhere it will leak.
@@ -80,7 +84,7 @@ namespace hip_impl
         hipStream_t stream,
         void* locked_stream,
         const char* kernel_name,
-        hc::accelerator_view* acc_v)
+        csq::accelerator_view* acc_v)
     {   // Precondition: acc_v is the accelerator_view associated with stream
         //               which is guarded by locked_stream;
         //               locked_stream is deletable.

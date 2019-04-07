@@ -34,7 +34,7 @@ ihipEvent_t::ihipEvent_t(unsigned flags) : _criticalData(this) { _flags = flags;
 
 
 // Attach to an existing completion future:
-void ihipEvent_t::attachToCompletionFuture(const hc::completion_future* cf, hipStream_t stream,
+void ihipEvent_t::attachToCompletionFuture(const csq::completion_future* cf, hipStream_t stream,
                                            ihipEventType_t eventType) {
     LockedAccessor_EventCrit_t crit(_criticalData);
     crit->_eventData.marker(*cf);
@@ -124,9 +124,9 @@ hipError_t hipEventRecord(hipEvent_t event, hipStream_t stream) {
 
             {
                 LockedAccessor_EventCrit_t eCrit(event->criticalData());
-                eCrit->_eventData.marker(hc::completion_future());  // reset event
+                eCrit->_eventData.marker(csq::completion_future());  // reset event
                 eCrit->_eventData._stream = stream;
-                eCrit->_eventData._timestamp = hc::get_system_ticks();
+                eCrit->_eventData._timestamp = csq::get_system_ticks();
                 eCrit->_eventData._state = hipEventStatusComplete;
             }
             return ihipLogStatus(hipSuccess);
@@ -134,7 +134,7 @@ hipError_t hipEventRecord(hipEvent_t event, hipStream_t stream) {
             // Record the event in the stream:
             // Keep a copy outside the critical section so we lock stream first, then event - to
             // avoid deadlock
-            hc::completion_future cf = stream->locked_recordEvent(event);
+            csq::completion_future cf = stream->locked_recordEvent(event);
 
             {
                 LockedAccessor_EventCrit_t eCrit(event->criticalData());
@@ -187,8 +187,8 @@ hipError_t hipEventSynchronize(hipEvent_t event) {
             return ihipLogStatus(hipSuccess);
         } else {
             ecd._stream->locked_eventWaitComplete(
-                ecd.marker(), (event->_flags & hipEventBlockingSync) ? hc::hcWaitModeBlocked
-                                                                     : hc::hcWaitModeActive);
+                ecd.marker(), (event->_flags & hipEventBlockingSync) ? csq::hcWaitModeBlocked
+                                                                     : csq::hcWaitModeActive);
 
             return ihipLogStatus(hipSuccess);
         }

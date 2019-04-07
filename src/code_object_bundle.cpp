@@ -1,6 +1,6 @@
-#include "../include/hip/hcc_detail/code_object_bundle.hpp"
+#include "../include/hip/clang_detail/code_object_bundle.hpp"
 
-#include <hsa/hsa.h>
+#include <inc/hcs.h>
 
 #include <algorithm>
 #include <cstddef>

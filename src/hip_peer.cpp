@@ -20,7 +20,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 */
 
-#include <hc_am.hpp>
+// TODO schi #include <hc_am.hpp>
+#include <inc/csq_pointer.h>
 
 #include "hip/hip_runtime.h"
 #include "hip_hcc_internal.h"

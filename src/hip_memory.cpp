@@ -20,16 +20,26 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 */
 
-#include <hc_am.hpp>
-#include "hsa/hsa.h"
-#include "hsa/hsa_ext_amd.h"
+//TODO schi  #include <hc_am.hpp>
+// #include "hsa/hsa.h"
+// #include "hsa/hsa_ext_amd.h"
+#include "inc/csq_pointer.h"
+#include "inc/hcs.h"
+#include "inc/hcs_ext.h"
+#include "inc/hcs_ext_image.h"
 
+
+// TODO schi temp for cc.sh  #include "hip/hip_runtime.h"
 #include "hip/hip_runtime.h"
 #include "hip_hcc_internal.h"
 #include "trace_helper.h"
+// TODO schi add for hipTextureReadMode
+#include "hip/clang_detail/texture_types.h"
 
+/* TODO schi move to hip_device_memory.cpp
 __device__ char __hip_device_heap[__HIP_SIZE_OF_HEAP];
 __device__ uint32_t __hip_device_page_flag[__HIP_NUM_PAGES];
+*/
 
 // Internal HIP APIS:
 namespace hip_internal {
@@ -66,7 +76,7 @@ int sharePtr(void* ptr, ihipCtx_t* ctx, bool shareWithAll, unsigned hipFlags) {
 
     if (shareWithAll) {
         // shareWithAll memory is not mapped to any device
-        hc::am_memtracker_update(ptr, -1, hipFlags);
+        csq::am_memtracker_update(ptr, -1, hipFlags);
         hsa_status_t s = hsa_amd_agents_allow_access(g_deviceCnt + 1, g_allAgents, NULL, ptr);
         tprintf(DB_MEM, "    allow access to CPU + all %d GPUs (shareWithAll)\n", g_deviceCnt);
         if (s != HSA_STATUS_SUCCESS) {
@@ -74,9 +84,9 @@ int sharePtr(void* ptr, ihipCtx_t* ctx, bool shareWithAll, unsigned hipFlags) {
         }
     } else {
 #if USE_APP_PTR_FOR_CTX
-        hc::am_memtracker_update(ptr, device->_deviceId, hipFlags, ctx);
+        csq::am_memtracker_update(ptr, device->_deviceId, hipFlags, ctx);
 #else
-        hc::am_memtracker_update(ptr, device->_deviceId, hipFlags);
+        csq::am_memtracker_update(ptr, device->_deviceId, hipFlags);
 #endif
         int peerCnt = 0;
         {
@@ -116,11 +126,11 @@ void* allocAndSharePtr(const char* msg, size_t sizeBytes, ihipCtx_t* ctx, bool s
 
 #if (__hcc_workweek__ >= 17332)
     if (alignment != 0) {
-        ptr = hc::am_aligned_alloc(sizeBytes, device->_acc, amFlags, alignment);
+        ptr = csq::am_aligned_alloc(sizeBytes, device->_acc, amFlags, alignment);
     } else
 #endif
     {
-        ptr = hc::am_alloc(sizeBytes, device->_acc, amFlags);
+        ptr = csq::am_alloc(sizeBytes, device->_acc, amFlags);
     }
     tprintf(DB_MEM, " alloc %s ptr:%p-%p size:%zu on dev:%d\n", msg, ptr,
             static_cast<char*>(ptr) + sizeBytes, sizeBytes, device->_deviceId);
@@ -165,13 +175,13 @@ hipError_t hipPointerGetAttributes(hipPointerAttribute_t* attributes, const void
     if ((attributes == nullptr) || (ptr == nullptr)) {
         e = hipErrorInvalidValue;
     } else {
-        hc::accelerator acc;
+        csq::accelerator acc;
 #if (__hcc_workweek__ >= 17332)
-        hc::AmPointerInfo amPointerInfo(NULL, NULL, NULL, 0, acc, 0, 0);
+        csq::AmPointerInfo amPointerInfo(NULL, NULL, NULL, 0, &acc, 0, 0);
 #else
-        hc::AmPointerInfo amPointerInfo(NULL, NULL, 0, acc, 0, 0);
+        csq::AmPointerInfo amPointerInfo(NULL, NULL, 0, &acc, 0, 0);
 #endif
-        am_status_t status = hc::am_memtracker_getinfo(&amPointerInfo, ptr);
+        am_status_t status = csq::am_memtracker_getinfo(&amPointerInfo, ptr);
         if (status == AM_SUCCESS) {
             attributes->memoryType =
                 amPointerInfo._isInDeviceMem ? hipMemoryTypeDevice : hipMemoryTypeHost;
@@ -214,14 +224,14 @@ hipError_t hipHostGetDevicePointer(void** devicePointer, void* hostPointer, unsi
     if ((flags != 0) || (devicePointer == nullptr) || (hostPointer == nullptr)) {
         e = hipErrorInvalidValue;
     } else {
-        hc::accelerator acc;
+        csq::accelerator acc;
         *devicePointer = NULL;
 #if (__hcc_workweek__ >= 17332)
-        hc::AmPointerInfo amPointerInfo(NULL, NULL, NULL, 0, acc, 0, 0);
+        csq::AmPointerInfo amPointerInfo(NULL, NULL, NULL, 0, &acc, 0, 0);
 #else
-        hc::AmPointerInfo amPointerInfo(NULL, NULL, 0, acc, 0, 0);
+        csq::AmPointerInfo amPointerInfo(NULL, NULL, 0, &acc, 0, 0);
 #endif
-        am_status_t status = hc::am_memtracker_getinfo(&amPointerInfo, hostPointer);
+        am_status_t status = csq::am_memtracker_getinfo(&amPointerInfo, hostPointer);
         if (status == AM_SUCCESS) {
             *devicePointer =
                 static_cast<char*>(amPointerInfo._devicePointer) +
@@ -355,7 +365,7 @@ hipError_t ihipMallocPitch(void** ptr, size_t* pitch, size_t width, size_t heigh
     auto ctx = ihipGetTlsDefaultCtx();
 
     if (ctx) {
-        hc::accelerator acc = ctx->getDevice()->_acc;
+        csq::accelerator acc = ctx->getDevice()->_acc;
         hsa_agent_t* agent = static_cast<hsa_agent_t*>(acc.get_hsa_agent());
 
         size_t allocGranularity = 0;
@@ -378,8 +388,11 @@ hipError_t ihipMallocPitch(void** ptr, size_t* pitch, size_t width, size_t heigh
 
         hsa_access_permission_t permission = HSA_ACCESS_PERMISSION_RW;
         hsa_ext_image_data_info_t imageInfo;
+        // TODO schi change because status is not used
+        /*
         hsa_status_t status =
             hsa_ext_image_data_get_info(*agent, &imageDescriptor, permission, &imageInfo);
+            */
         size_t alignment = imageInfo.alignment <= allocGranularity ? 0 : imageInfo.alignment;
 
         const unsigned am_flags = 0;
@@ -415,7 +428,8 @@ hipError_t hipMalloc3D(hipPitchedPtr* pitchedDevPtr, hipExtent extent) {
 
     if (extent.width == 0 || extent.height == 0) return ihipLogStatus(hipErrorUnknown);
     if (!pitchedDevPtr) return ihipLogStatus(hipErrorInvalidValue);
-    void* ptr;
+    // TODO schi compile warn
+    // void* ptr;
     size_t pitch;
 
     hip_status =
@@ -501,7 +515,7 @@ hipError_t hipArrayCreate(hipArray** array, const HIP_ARRAY_DESCRIPTOR* pAllocat
                     hip_status = hipErrorUnknown;
                     break;
             }
-            hc::accelerator acc = ctx->getDevice()->_acc;
+            csq::accelerator acc = ctx->getDevice()->_acc;
             hsa_agent_t* agent = static_cast<hsa_agent_t*>(acc.get_hsa_agent());
 
             size_t allocGranularity = 0;
@@ -579,7 +593,7 @@ hipError_t hipMallocArray(hipArray** array, const hipChannelFormatDesc* desc, si
 
             const size_t allocSize = size * ((desc->x + desc->y + desc->z + desc->w) / 8);
 
-            hc::accelerator acc = ctx->getDevice()->_acc;
+            csq::accelerator acc = ctx->getDevice()->_acc;
             hsa_agent_t* agent = static_cast<hsa_agent_t*>(acc.get_hsa_agent());
 
             size_t allocGranularity = 0;
@@ -694,7 +708,7 @@ hipError_t hipArray3DCreate(hipArray** array, const HIP_ARRAY_DESCRIPTOR* pAlloc
                 break;
         }
 
-        hc::accelerator acc = ctx->getDevice()->_acc;
+        csq::accelerator acc = ctx->getDevice()->_acc;
         hsa_agent_t* agent = static_cast<hsa_agent_t*>(acc.get_hsa_agent());
 
         size_t allocGranularity = 0;
@@ -789,7 +803,7 @@ hipError_t hipMalloc3DArray(hipArray** array, const struct hipChannelFormatDesc*
 
         const size_t allocSize = size * ((desc->x + desc->y + desc->z + desc->w) / 8);
 
-        hc::accelerator acc = ctx->getDevice()->_acc;
+        csq::accelerator acc = ctx->getDevice()->_acc;
         hsa_agent_t* agent = static_cast<hsa_agent_t*>(acc.get_hsa_agent());
 
         size_t allocGranularity = 0;
@@ -850,13 +864,13 @@ hipError_t hipHostGetFlags(unsigned int* flagsPtr, void* hostPtr) {
 
     hipError_t hip_status = hipSuccess;
 
-    hc::accelerator acc;
+    csq::accelerator acc;
 #if (__hcc_workweek__ >= 17332)
-    hc::AmPointerInfo amPointerInfo(NULL, NULL, NULL, 0, acc, 0, 0);
+    csq::AmPointerInfo amPointerInfo(NULL, NULL, NULL, 0, &acc, 0, 0);
 #else
-    hc::AmPointerInfo amPointerInfo(NULL, NULL, 0, acc, 0, 0);
+    csq::AmPointerInfo amPointerInfo(NULL, NULL, 0, &acc, 0, 0);
 #endif
-    am_status_t status = hc::am_memtracker_getinfo(&amPointerInfo, hostPtr);
+    am_status_t status = csq::am_memtracker_getinfo(&amPointerInfo, hostPtr);
     if (status == AM_SUCCESS) {
         *flagsPtr = amPointerInfo._appAllocationFlags;
         if (*flagsPtr == 0) {
@@ -883,13 +897,13 @@ hipError_t hipHostRegister(void* hostPtr, size_t sizeBytes, unsigned int flags) 
         return ihipLogStatus(hipErrorInvalidValue);
     }
 
-    hc::accelerator acc;
+    csq::accelerator acc;
 #if (__hcc_workweek__ >= 17332)
-    hc::AmPointerInfo amPointerInfo(NULL, NULL, NULL, 0, acc, 0, 0);
+    csq::AmPointerInfo amPointerInfo(NULL, NULL, NULL, 0, &acc, 0, 0);
 #else
-    hc::AmPointerInfo amPointerInfo(NULL, NULL, 0, acc, 0, 0);
+    csq::AmPointerInfo amPointerInfo(NULL, NULL, 0, &acc, 0, 0);
 #endif
-    am_status_t am_status = hc::am_memtracker_getinfo(&amPointerInfo, hostPtr);
+    am_status_t am_status = csq::am_memtracker_getinfo(&amPointerInfo, hostPtr);
 
     if (am_status == AM_SUCCESS) {
         hip_status = hipErrorHostMemoryAlreadyRegistered;
@@ -903,23 +917,23 @@ hipError_t hipHostRegister(void* hostPtr, size_t sizeBytes, unsigned int flags) 
             if (flags == hipHostRegisterDefault || flags == hipHostRegisterPortable ||
                 flags == hipHostRegisterMapped) {
                 auto device = ctx->getWriteableDevice();
-                std::vector<hc::accelerator> vecAcc;
+                std::vector<csq::accelerator> vecAcc;
                 for (int i = 0; i < g_deviceCnt; i++) {
                     vecAcc.push_back(ihipGetDevice(i)->_acc);
                 }
-                am_status = hc::am_memory_host_lock(device->_acc, hostPtr, sizeBytes, &vecAcc[0],
+                am_status = csq::am_memory_host_lock(device->_acc, hostPtr, sizeBytes, &vecAcc[0],
                                                     vecAcc.size());
                 if ( am_status == AM_SUCCESS ) {
-                     am_status = hc::am_memtracker_getinfo(&amPointerInfo, hostPtr);
+                     am_status = csq::am_memtracker_getinfo(&amPointerInfo, hostPtr);
 
                 if ( am_status == AM_SUCCESS ) {
                     void *devPtr = amPointerInfo._devicePointer;
  #if USE_APP_PTR_FOR_CTX
-                    hc::am_memtracker_update(hostPtr, device->_deviceId, flags, ctx);
-                    hc::am_memtracker_update(devPtr, device->_deviceId, flags, ctx);
+                    csq::am_memtracker_update(hostPtr, device->_deviceId, flags, ctx);
+                    csq::am_memtracker_update(devPtr, device->_deviceId, flags, ctx);
  #else
-                    hc::am_memtracker_update(hostPtr, device->_deviceId, flags);
-                    hc::am_memtracker_update(devPtr, device->_deviceId, flags);
+                    csq::am_memtracker_update(hostPtr, device->_deviceId, flags);
+                    csq::am_memtracker_update(devPtr, device->_deviceId, flags);
  #endif
                     tprintf(DB_MEM, " %s registered ptr=%p and allowed access to %zu peers\n", __func__,
                                  hostPtr, vecAcc.size());
@@ -946,7 +960,7 @@ hipError_t hipHostUnregister(void* hostPtr) {
         hip_status = hipErrorInvalidValue;
     } else {
         auto device = ctx->getWriteableDevice();
-        am_status_t am_status = hc::am_memory_host_unlock(device->_acc, hostPtr);
+        am_status_t am_status = csq::am_memory_host_unlock(device->_acc, hostPtr);
         tprintf(DB_MEM, " %s unregistered ptr=%p\n", __func__, hostPtr);
         if (am_status != AM_SUCCESS) {
             hip_status = hipErrorHostMemoryNotRegistered;
@@ -1070,7 +1084,7 @@ hipError_t hipMemcpy(void* dst, const void* src, size_t sizeBytes, hipMemcpyKind
 
     hipStream_t stream = ihipSyncAndResolveStream(hipStreamNull);
 
-    hc::completion_future marker;
+    csq::completion_future marker;
 
     if(dst==NULL || src==NULL)
 	{
@@ -1092,7 +1106,7 @@ hipError_t hipMemcpyHtoD(hipDeviceptr_t dst, void* src, size_t sizeBytes) {
 
     hipStream_t stream = ihipSyncAndResolveStream(hipStreamNull);
 
-    hc::completion_future marker;
+    csq::completion_future marker;
 
     hipError_t e = hipSuccess;
 
@@ -1111,7 +1125,7 @@ hipError_t hipMemcpyDtoH(void* dst, hipDeviceptr_t src, size_t sizeBytes) {
 
     hipStream_t stream = ihipSyncAndResolveStream(hipStreamNull);
 
-    hc::completion_future marker;
+    csq::completion_future marker;
 
     hipError_t e = hipSuccess;
 
@@ -1130,7 +1144,7 @@ hipError_t hipMemcpyDtoD(hipDeviceptr_t dst, hipDeviceptr_t src, size_t sizeByte
 
     hipStream_t stream = ihipSyncAndResolveStream(hipStreamNull);
 
-    hc::completion_future marker;
+    csq::completion_future marker;
 
     hipError_t e = hipSuccess;
 
@@ -1148,7 +1162,7 @@ hipError_t hipMemcpyHtoH(void* dst, void* src, size_t sizeBytes) {
 
     hipStream_t stream = ihipSyncAndResolveStream(hipStreamNull);
 
-    hc::completion_future marker;
+    csq::completion_future marker;
 
     hipError_t e = hipSuccess;
 
@@ -1196,7 +1210,7 @@ hipError_t hipMemcpy2DToArray(hipArray* dst, size_t wOffset, size_t hOffset, con
 
     hipStream_t stream = ihipSyncAndResolveStream(hipStreamNull);
 
-    hc::completion_future marker;
+    csq::completion_future marker;
 
     hipError_t e = hipSuccess;
 
@@ -1248,7 +1262,7 @@ hipError_t hipMemcpyToArray(hipArray* dst, size_t wOffset, size_t hOffset, const
 
     hipStream_t stream = ihipSyncAndResolveStream(hipStreamNull);
 
-    hc::completion_future marker;
+    csq::completion_future marker;
 
     hipError_t e = hipSuccess;
 
@@ -1267,7 +1281,7 @@ hipError_t hipMemcpyFromArray(void* dst, hipArray_const_t srcArray, size_t wOffs
 
     hipStream_t stream = ihipSyncAndResolveStream(hipStreamNull);
 
-    hc::completion_future marker;
+    csq::completion_future marker;
 
     hipError_t e = hipSuccess;
 
@@ -1285,7 +1299,7 @@ hipError_t hipMemcpyHtoA(hipArray* dstArray, size_t dstOffset, const void* srcHo
 
     hipStream_t stream = ihipSyncAndResolveStream(hipStreamNull);
 
-    hc::completion_future marker;
+    csq::completion_future marker;
 
     hipError_t e = hipSuccess;
     try {
@@ -1303,7 +1317,7 @@ hipError_t hipMemcpyAtoH(void* dst, hipArray* srcArray, size_t srcOffset, size_t
 
     hipStream_t stream = ihipSyncAndResolveStream(hipStreamNull);
 
-    hc::completion_future marker;
+    csq::completion_future marker;
 
     hipError_t e = hipSuccess;
 
@@ -1379,7 +1393,7 @@ hipError_t hipMemcpy3D(const struct hipMemcpy3DParms* p) {
             dstPitch = p->dstPtr.pitch;
         }
         hipStream_t stream = ihipSyncAndResolveStream(hipStreamNull);
-        hc::completion_future marker;
+        csq::completion_future marker;
         try {
             if((widthInBytes == dstPitch) && (widthInBytes == srcPitch)) {
                 stream->locked_copySync((void*)dstPtr, (void*)srcPtr, widthInBytes*height*depth, p->kind, false);
@@ -1404,9 +1418,11 @@ hipError_t hipMemcpy3D(const struct hipMemcpy3DParms* p) {
     return ihipLogStatus(e);
 }
 
+///* TODO schi move to hip_device_memory.h
+/* NOTE: use __TODOglobal__ since cc.sh use to distinguish cuda or not
 namespace {
 template <uint32_t block_dim, typename RandomAccessIterator, typename N, typename T>
-__global__ void hip_fill_n(RandomAccessIterator f, N n, T value) {
+__TODOglobal__ void hip_fill_n(RandomAccessIterator f, N n, T value) {
     const uint32_t grid_dim = gridDim.x * blockDim.x;
 
     size_t idx = blockIdx.x * block_dim + threadIdx.x;
@@ -1425,7 +1441,7 @@ inline const T& clamp_integer(const T& x, const T& lower, const T& upper) {
 }
 
 template <typename T>
-__global__ void hip_copy2d_n(T* dst, const T* src, size_t width, size_t height, size_t destPitch, size_t srcPitch) {
+__TODOglobal__ void hip_copy2d_n(T* dst, const T* src, size_t width, size_t height, size_t destPitch, size_t srcPitch) {
 
     size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     size_t idy = blockIdx.y * blockDim.y + threadIdx.y;
@@ -1482,7 +1498,7 @@ hipError_t ihipMemset(void* dst, int  value, size_t count, hipStream_t stream, e
                 try {
                     value = value & 0xff;
                     uint32_t value32 = (value << 24) | (value << 16) | (value << 8) | (value) ;
-                    ihipMemsetKernel<uint32_t> (stream, static_cast<uint32_t*> (dst), value32, count/sizeof(uint32_t));
+                    // FIXME compile error ihipMemsetKernel<uint32_t> (stream, static_cast<uint32_t*> (dst), value32, count/sizeof(uint32_t));
                 }
                 catch (std::exception &ex) {
                     e = hipErrorInvalidValue;
@@ -1490,7 +1506,7 @@ hipError_t ihipMemset(void* dst, int  value, size_t count, hipStream_t stream, e
              } else {
                 // use a slow byte-per-workitem copy:
                 try {
-                    ihipMemsetKernel<char> (stream, static_cast<char*> (dst), value, count);
+                    // FIXME compile error ihipMemsetKernel<char> (stream, static_cast<char*> (dst), value, count);
                 }
                 catch (std::exception &ex) {
                     e = hipErrorInvalidValue;
@@ -1499,14 +1515,14 @@ hipError_t ihipMemset(void* dst, int  value, size_t count, hipStream_t stream, e
         } else {
            if(copyDataType == ihipMemsetDataTypeInt) { // 4 Bytes value
                try {
-                   ihipMemsetKernel<uint32_t> (stream, static_cast<uint32_t*> (dst), value, count);
+                   // FIXME compile error ihipMemsetKernel<uint32_t> (stream, static_cast<uint32_t*> (dst), value, count);
                } catch (std::exception &ex) {
                    e = hipErrorInvalidValue;
                }
             } else if(copyDataType == ihipMemsetDataTypeShort) {
                try {
                    value = value & 0xffff;
-                   ihipMemsetKernel<uint16_t> (stream, static_cast<uint16_t*> (dst), value, count);
+                   // FIXME compile error ihipMemsetKernel<uint16_t> (stream, static_cast<uint16_t*> (dst), value, count);
                } catch (std::exception &ex) {
                    e = hipErrorInvalidValue;
                }
@@ -1521,17 +1537,25 @@ hipError_t ihipMemset(void* dst, int  value, size_t count, hipStream_t stream, e
     }
     return e;
 };
+*/
+typedef enum ihipMemsetDataType {
+    ihipMemsetDataTypeChar   = 0,
+    ihipMemsetDataTypeShort  = 1,
+    ihipMemsetDataTypeInt    = 2
+}ihipMemsetDataType;
+
+hipError_t ihipMemset(void* dst, int  value, size_t count, hipStream_t stream, enum ihipMemsetDataType copyDataType  );
 
 hipError_t getLockedPointer(void *hostPtr, size_t dataLen, void **devicePtrPtr)
 {
-        hc::accelerator acc;
+        csq::accelerator acc;
 
 #if (__hcc_workweek__ >= 17332)
-        hc::AmPointerInfo amPointerInfo(NULL, NULL, NULL, 0, acc, 0, 0);
+        csq::AmPointerInfo amPointerInfo(NULL, NULL, NULL, 0, &acc, 0, 0);
 #else
-        hc::AmPointerInfo amPointerInfo(NULL, NULL, 0, acc, 0, 0);
+        csq::AmPointerInfo amPointerInfo(NULL, NULL, 0, &acc, 0, 0);
 #endif
-        am_status_t status = hc::am_memtracker_getinfo(&amPointerInfo, hostPtr);
+        am_status_t status = csq::am_memtracker_getinfo(&amPointerInfo, hostPtr);
         if (status == AM_SUCCESS) {
             *devicePtrPtr = static_cast<char*>(amPointerInfo._devicePointer) +
                 (static_cast<char*>(hostPtr) - static_cast<char*>(amPointerInfo._hostPointer));
@@ -1561,7 +1585,7 @@ hipError_t ihipMemcpy2D(void* dst, size_t dpitch, const void* src, size_t spitch
             actualDest = pinnedPtr;
           }
     }
-    hc::completion_future marker;
+    csq::completion_future marker;
 
     hipError_t e = hipSuccess;
     if((width == dpitch) && (width == spitch)) {
@@ -1804,7 +1828,7 @@ hipError_t hipMemGetInfo(size_t* free, size_t* total) {
         if (free) {
             // TODO - replace with kernel-level for reporting free memory:
             size_t deviceMemSize, hostMemSize, userMemSize;
-            hc::am_memtracker_sizeinfo(device->_acc, &deviceMemSize, &hostMemSize, &userMemSize);
+            csq::am_memtracker_sizeinfo(device->_acc, &deviceMemSize, &hostMemSize, &userMemSize);
 
             *free = device->_props.totalGlobalMem - deviceMemSize;
 
@@ -1827,13 +1851,13 @@ hipError_t hipMemPtrGetInfo(void* ptr, size_t* size) {
     hipError_t e = hipSuccess;
 
     if (ptr != nullptr && size != nullptr) {
-        hc::accelerator acc;
+        csq::accelerator acc;
 #if (__hcc_workweek__ >= 17332)
-        hc::AmPointerInfo amPointerInfo(NULL, NULL, NULL, 0, acc, 0, 0);
+        csq::AmPointerInfo amPointerInfo(NULL, NULL, NULL, 0, &acc, 0, 0);
 #else
-        hc::AmPointerInfo amPointerInfo(NULL, NULL, 0, acc, 0, 0);
+        csq::AmPointerInfo amPointerInfo(NULL, NULL, 0, &acc, 0, 0);
 #endif
-        am_status_t status = hc::am_memtracker_getinfo(&amPointerInfo, ptr);
+        am_status_t status = csq::am_memtracker_getinfo(&amPointerInfo, ptr);
         if (status == AM_SUCCESS) {
             *size = amPointerInfo._sizeBytes;
         } else {
@@ -1856,16 +1880,16 @@ hipError_t hipFree(void* ptr) {
                                                       // for all activity to finish.
 
     if (ptr) {
-        hc::accelerator acc;
+        csq::accelerator acc;
 #if (__hcc_workweek__ >= 17332)
-        hc::AmPointerInfo amPointerInfo(NULL, NULL, NULL, 0, acc, 0, 0);
+        csq::AmPointerInfo amPointerInfo(NULL, NULL, NULL, 0, &acc, 0, 0);
 #else
-        hc::AmPointerInfo amPointerInfo(NULL, NULL, 0, acc, 0, 0);
+        csq::AmPointerInfo amPointerInfo(NULL, NULL, 0, &acc, 0, 0);
 #endif
-        am_status_t status = hc::am_memtracker_getinfo(&amPointerInfo, ptr);
+        am_status_t status = csq::am_memtracker_getinfo(&amPointerInfo, ptr);
         if (status == AM_SUCCESS) {
             if (amPointerInfo._hostPointer == NULL) {
-                hc::am_free(ptr);
+                csq::am_free(ptr);
                 hipStatus = hipSuccess;
             }
         }
@@ -1888,16 +1912,16 @@ hipError_t hipHostFree(void* ptr) {
 
     hipError_t hipStatus = hipErrorInvalidValue;
     if (ptr) {
-        hc::accelerator acc;
+        csq::accelerator acc;
 #if (__hcc_workweek__ >= 17332)
-        hc::AmPointerInfo amPointerInfo(NULL, NULL, NULL, 0, acc, 0, 0);
+        csq::AmPointerInfo amPointerInfo(NULL, NULL, NULL, 0, &acc, 0, 0);
 #else
-        hc::AmPointerInfo amPointerInfo(NULL, NULL, 0, acc, 0, 0);
+        csq::AmPointerInfo amPointerInfo(NULL, NULL, 0, &acc, 0, 0);
 #endif
-        am_status_t status = hc::am_memtracker_getinfo(&amPointerInfo, ptr);
+        am_status_t status = csq::am_memtracker_getinfo(&amPointerInfo, ptr);
         if (status == AM_SUCCESS) {
             if (amPointerInfo._hostPointer == ptr) {
-                hc::am_free(ptr);
+                csq::am_free(ptr);
                 hipStatus = hipSuccess;
             }
         }
@@ -1923,16 +1947,16 @@ hipError_t hipFreeArray(hipArray* array) {
                                                       // for all activity to finish.
 
     if (array->data) {
-        hc::accelerator acc;
+        csq::accelerator acc;
 #if (__hcc_workweek__ >= 17332)
-        hc::AmPointerInfo amPointerInfo(NULL, NULL, NULL, 0, acc, 0, 0);
+        csq::AmPointerInfo amPointerInfo(NULL, NULL, NULL, 0, &acc, 0, 0);
 #else
-        hc::AmPointerInfo amPointerInfo(NULL, NULL, 0, acc, 0, 0);
+        csq::AmPointerInfo amPointerInfo(NULL, NULL, 0, &acc, 0, 0);
 #endif
-        am_status_t status = hc::am_memtracker_getinfo(&amPointerInfo, array->data);
+        am_status_t status = csq::am_memtracker_getinfo(&amPointerInfo, array->data);
         if (status == AM_SUCCESS) {
             if (amPointerInfo._hostPointer == NULL) {
-                hc::am_free(array->data);
+                csq::am_free(array->data);
                 hipStatus = hipSuccess;
             }
         }
@@ -1944,13 +1968,13 @@ hipError_t hipFreeArray(hipArray* array) {
 hipError_t hipMemGetAddressRange(hipDeviceptr_t* pbase, size_t* psize, hipDeviceptr_t dptr) {
     HIP_INIT_API(hipMemGetAddressRange, pbase, psize, dptr);
     hipError_t hipStatus = hipSuccess;
-    hc::accelerator acc;
+    csq::accelerator acc;
 #if (__hcc_workweek__ >= 17332)
-    hc::AmPointerInfo amPointerInfo(NULL, NULL, NULL, 0, acc, 0, 0);
+    csq::AmPointerInfo amPointerInfo(NULL, NULL, NULL, 0, &acc, 0, 0);
 #else
-    hc::AmPointerInfo amPointerInfo(NULL, NULL, 0, acc, 0, 0);
+    csq::AmPointerInfo amPointerInfo(NULL, NULL, 0, &acc, 0, 0);
 #endif
-    am_status_t status = hc::am_memtracker_getinfo(&amPointerInfo, dptr);
+    am_status_t status = csq::am_memtracker_getinfo(&amPointerInfo, dptr);
     if (status == AM_SUCCESS) {
         *pbase = amPointerInfo._devicePointer;
         *psize = amPointerInfo._sizeBytes;
@@ -1967,16 +1991,16 @@ hipError_t hipIpcGetMemHandle(hipIpcMemHandle_t* handle, void* devPtr) {
     hipError_t hipStatus = hipSuccess;
     // Get the size of allocated pointer
     size_t psize = 0u;
-    hc::accelerator acc;
+    csq::accelerator acc;
     if ((handle == NULL) || (devPtr == NULL)) {
         hipStatus = hipErrorInvalidResourceHandle;
     } else {
 #if (__hcc_workweek__ >= 17332)
-        hc::AmPointerInfo amPointerInfo(NULL, NULL, NULL, 0, acc, 0, 0);
+        csq::AmPointerInfo amPointerInfo(NULL, NULL, NULL, 0, &acc, 0, 0);
 #else
-        hc::AmPointerInfo amPointerInfo(NULL, NULL, 0, acc, 0, 0);
+        csq::AmPointerInfo amPointerInfo(NULL, NULL, 0, &acc, 0, 0);
 #endif
-        am_status_t status = hc::am_memtracker_getinfo(&amPointerInfo, devPtr);
+        am_status_t status = csq::am_memtracker_getinfo(&amPointerInfo, devPtr);
         if (status == AM_SUCCESS) {
             psize = (size_t)amPointerInfo._sizeBytes;
         } else {
@@ -2006,7 +2030,7 @@ hipError_t hipIpcOpenMemHandle(void** devPtr, hipIpcMemHandle_t handle, unsigned
     } else {
 #if USE_IPC
         // Get the current device agent.
-        hc::accelerator acc;
+        csq::accelerator acc;
         hsa_agent_t* agent = static_cast<hsa_agent_t*>(acc.get_hsa_agent());
         if (!agent) return hipErrorInvalidResourceHandle;
 

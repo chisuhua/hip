@@ -21,7 +21,7 @@ THE SOFTWARE.
 */
 
 #include "hip/hip_runtime.h"
-#include "hip/hcc_detail/hip_prof_api.h"
+#include "hip/clang_detail/hip_prof_api.h"
 
 // HIP API callback/activity
 

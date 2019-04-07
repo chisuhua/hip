@@ -21,15 +21,27 @@ THE SOFTWARE.
 */
 
 #include "hip/hip_runtime.h"
-#include "hip/hcc_detail/elfio/elfio.hpp"
-#include "hip/hcc_detail/hsa_helpers.hpp"
-#include "hip/hcc_detail/program_state.hpp"
+
+#include "hip/clang_detail/elfio/elfio.hpp"
+#include "hip/clang_detail/hsa_helpers.hpp"
+#include "hip/clang_detail/program_state.hpp"
 #include "hip_hcc_internal.h"
 #include "trace_helper.h"
 
-#include <hsa/amd_hsa_kernel_code.h>
-#include <hsa/hsa.h>
-#include <hsa/hsa_ext_amd.h>
+// TODO schi add for ihipPreLaunchKernel
+#include "hip/clang_detail/hip_runtime.h"
+
+// TODO schi add for textureReference
+#include "hip/clang_detail/texture_types.h"
+
+// TODO schi 
+#include <inc/hcs_kernel_code.h>
+#include <inc/hcs.h>
+#include <inc/hcs_ext.h>
+#include "inc/csq_pointer.h" 
+// #include <hsa/amd_hsa_kernel_code.h>
+// #include <hsa/hsa.h>
+// #include <hsa/hsa_ext_amd.h>
 
 #include <algorithm>
 #include <cassert>
@@ -47,7 +59,7 @@ THE SOFTWARE.
 #include <unordered_map>
 #include <utility>
 #include <vector>
-#include "../include/hip/hcc_detail/code_object_bundle.hpp"
+#include "../include/hip/clang_detail/code_object_bundle.hpp"
 #include "hip_fatbin.h"
 // TODO Use Pool APIs from HCC to get memory regions.
 
@@ -88,7 +100,8 @@ map<string, ihipKernArgInfo> kernelArguments;
 
 struct ihipModuleSymbol_t {
     uint64_t _object{};  // The kernel object.
-    amd_kernel_code_t const* _header{};
+    // TODO schi amd_kernel_code_t const* _header{};
+    hcs_kernel_code_t const* _header{};
     string _name;  // TODO - review for performance cost.  Name is just used for debug.
 };
 
@@ -125,6 +138,8 @@ hipError_t hipModuleUnload(hipModule_t hmod) {
     return ihipLogStatus(hipSuccess);
 }
 
+// FIXME workaround llvm-ir executor
+extern std::map<const void*, std::vector<hipFunction_t>> g_functions;
 hipError_t ihipModuleLaunchKernel(hipFunction_t f, uint32_t globalWorkSizeX,
                                   uint32_t globalWorkSizeY, uint32_t globalWorkSizeZ,
                                   uint32_t localWorkSizeX, uint32_t localWorkSizeY,
@@ -133,6 +148,14 @@ hipError_t ihipModuleLaunchKernel(hipFunction_t f, uint32_t globalWorkSizeX,
                                   hipEvent_t startEvent, hipEvent_t stopEvent, uint32_t flags) {
     auto ctx = ihipGetTlsDefaultCtx();
     hipError_t ret = hipSuccess;
+
+    // FIXME schi workaround for llvm-ir executor get function by function name
+    std::vector<hipFunction_t> functions{f};
+    // functions[0] = *func;
+    decltype(g_functions)::iterator it = g_functions.find(f->_name.c_str());
+    if ( it == g_functions.end()) {
+        g_functions.insert(std::make_pair(f->_name.c_str(), std::move(functions)));
+    }
 
     if (ctx == nullptr) {
         ret = hipErrorInvalidDevice;
@@ -217,7 +240,7 @@ hipError_t ihipModuleLaunchKernel(hipFunction_t f, uint32_t globalWorkSizeX,
         };
 
 
-        hc::completion_future cf;
+        csq::completion_future cf;
 
         lp.av->dispatch_hsa_kernel(&aql, config[1] /* kernarg*/, kernArgSize,
                                    (startEvent || stopEvent) ? &cf : nullptr
@@ -251,6 +274,11 @@ hipError_t hipModuleLaunchKernel(hipFunction_t f, uint32_t gridDimX, uint32_t gr
                                  void** kernelParams, void** extra) {
     HIP_INIT_API(hipModuleLaunchKernel, f, gridDimX, gridDimY, gridDimZ, blockDimX, blockDimY, blockDimZ, sharedMemBytes,
                  hStream, kernelParams, extra);
+    /*
+    return ihipLogStatus(ihipModuleLaunchKernel(
+        f, gridDimX, gridDimY, gridDimZ, blockDimX, blockDimY,
+        blockDimZ, sharedMemBytes, hStream, kernelParams, extra, nullptr, nullptr, 0));
+        */
     return ihipLogStatus(ihipModuleLaunchKernel(
         f, blockDimX * gridDimX, blockDimY * gridDimY, gridDimZ * blockDimZ, blockDimX, blockDimY,
         blockDimZ, sharedMemBytes, hStream, kernelParams, extra, nullptr, nullptr, 0));
@@ -319,13 +347,14 @@ inline void track(const Agent_global& x, hsa_agent_t agent) {
            break;
     }
     auto device = ihipGetDevice(deviceIndex - 1);
-    hc::AmPointerInfo ptr_info(nullptr, x.address, x.address, x.byte_cnt, device->_acc, true,
+    // TODO schi 
+    csq::AmPointerInfo ptr_info(nullptr, x.address, x.address, (std::size_t)(x.byte_cnt), &(device->_acc), true,
                                false);
-    hc::am_memtracker_add(x.address, ptr_info);
+    csq::am_memtracker_add(x.address, ptr_info);
 #if USE_APP_PTR_FOR_CTX
-    hc::am_memtracker_update(x.address, device->_deviceId, 0u, ihipGetTlsDefaultCtx());
+    csq::am_memtracker_update(x.address, device->_deviceId, 0u, ihipGetTlsDefaultCtx());
 #else
-    hc::am_memtracker_update(x.address, device->_deviceId, 0u);
+    csq::am_memtracker_update(x.address, device->_deviceId, 0u);
 #endif
 
 }
@@ -426,6 +455,7 @@ namespace hip_impl {
     }
 } // Namespace hip_impl.
 
+
 hipError_t ihipModuleGetFunction(hipFunction_t* func, hipModule_t hmod, const char* name) {
     using namespace hip_impl;
 
@@ -457,7 +487,8 @@ hipError_t hipModuleGetFunction(hipFunction_t* hfunc, hipModule_t hmod, const ch
 }
 
 namespace {
-hipFuncAttributes make_function_attributes(const amd_kernel_code_t& header) {
+    // TODO schi 
+hipFuncAttributes make_function_attributes(const hcs_kernel_code_t& header) {
     hipFuncAttributes r{};
 
     hipDeviceProp_t prop{};
@@ -574,7 +605,8 @@ hipError_t hipModuleGetTexRef(textureReference** texRef, hipModule_t hmod, const
 
     HIP_INIT_API(hipModuleGetTexRef, texRef, hmod, name);
 
-    hipError_t ret = hipErrorNotFound;
+    // TODO schi
+    // hipError_t ret = hipErrorNotFound;
     if (!texRef) return ihipLogStatus(hipErrorInvalidValue);
 
     if (!hmod || !name) return ihipLogStatus(hipErrorNotInitialized);

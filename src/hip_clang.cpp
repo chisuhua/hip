@@ -29,6 +29,9 @@ THE SOFTWARE.
 #include "hip_fatbin.h"
 #include "trace_helper.h"
 
+// TODO schi add it for hip_impl::load_executable definition
+#include "hip/clang_detail/program_state.hpp"
+
 extern "C" std::vector<hipModule_t>*
 __hipRegisterFatBinary(const void* data)
 {
@@ -70,7 +73,10 @@ __hipRegisterFatBinary(const void* data)
       char name[64] = {};
       hsa_agent_get_info(agent, HSA_AGENT_INFO_NAME, name);
       if (target.compare(name)) {
-         continue;
+        // FIXME schi hack , demo use gfx803 as llvm backend target
+        if (strcmp(name, "Pasim")) {
+          continue;
+        }
       }
 
       ihipModule_t* module = new ihipModule_t;
@@ -126,7 +132,7 @@ extern "C" void __hipRegisterFunction(
   dim3*        gridDim,
   int*         wSize)
 {
-  HIP_INIT_API(NONE, modules, hostFunction, deviceFunction, deviceName);
+  // TODO schi HIP_INIT_API(NONE, modules, hostFunction, deviceFunction, deviceName);
   std::vector<hipFunction_t> functions{g_deviceCnt};
 
   assert(modules && modules->size() >= g_deviceCnt);

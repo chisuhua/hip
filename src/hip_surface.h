@@ -23,7 +23,7 @@ THE SOFTWARE.
 #ifndef HIP_INCLUDE_HIP_HCC_DETAIL_HIP_SURFACE_H
 #define HIP_INCLUDE_HIP_HCC_DETAIL_HIP_SURFACE_H
 
-#include <hip/hcc_detail/hip_surface_types.h>
+#include <hip/clang_detail/hip_surface_types.h>
 struct hipSurface {
     hipArray* array;
     hipResourceDesc resDesc;

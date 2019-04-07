@@ -20,13 +20,18 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 */
 
-#include "hip/hcc_detail/program_state.hpp"
+#include "hip/clang_detail/program_state.hpp"
 
-#include "hip/hip_runtime_api.h"
+// TODO schi change from hip_runtime_api to hip_runtime
+// #include "hip/hip_runtime_api.h"
+#include "hip/hip_runtime.h"
 
 // Internal header, do not percolate upwards.
 #include "hip_hcc_internal.h"
-#include "hc.hpp"
+
+// TODO schi #include "hc.hpp"
+#include "inc/csq_accelerator.h"
+
 #include "trace_helper.h"
 
 #include <cassert>
@@ -53,8 +58,10 @@ namespace hip_impl
                 ihipGetTlsDefaultCtx()->getDevice()->_deviceId)->_hsaAgent;
         }
         else {
+            csq::accelerator acc; 
             return *static_cast<hsa_agent_t*>(
-                accelerator{}.get_default_view().get_hsa_agent());
+                // TODO schi accelerator{}.get_default_view().get_hsa_agent());
+                acc.get_default_view().get_hsa_agent());
         }
     }
 }

@@ -40,14 +40,25 @@ THE SOFTWARE.
 #include <atomic>
 #include <mutex>
 
+// TODO schi #include <hc.hpp>
+#include "inc/csq_accelerator.h"
+// TODO schi #include <hc_am.hpp>
+#include "inc/csq_pointer.h"
+#include "inc/runtime.h"
+
+#include "inc/hcs_ext.h"
+/*
 #include <hc.hpp>
 #include <hc_am.hpp>
 #include "hsa/hsa_ext_amd.h"
+*/
 
 #include "hip/hip_runtime.h"
 #include "hip_hcc_internal.h"
 #include "trace_helper.h"
 #include "env.h"
+
+#include "../include/hip/clang_detail/grid_launch.h"
 
 // TODO - create a stream-based debug interface as an additional option for tprintf
 #define DB_PEER_CTX 0
@@ -255,7 +266,7 @@ TidInfo::TidInfo() : _apiSeqNum(0) {
 // ihipStream_t:
 //=================================================================================================
 //---
-ihipStream_t::ihipStream_t(ihipCtx_t* ctx, hc::accelerator_view av, unsigned int flags)
+ihipStream_t::ihipStream_t(ihipCtx_t* ctx, csq::accelerator_view av, unsigned int flags)
     : _id(0),  // will be set by add function.
       _flags(flags),
       _ctx(ctx),
@@ -285,27 +296,27 @@ ihipStream_t::ihipStream_t(ihipCtx_t* ctx, hc::accelerator_view av, unsigned int
 ihipStream_t::~ihipStream_t() {}
 
 
-hc::hcWaitMode ihipStream_t::waitMode() const {
-    hc::hcWaitMode waitMode = hc::hcWaitModeActive;
+csq::hcWaitMode ihipStream_t::waitMode() const {
+    csq::hcWaitMode waitMode = csq::hcWaitModeActive;
 
     if (_scheduleMode == Auto) {
         if (g_deviceCnt > g_numLogicalThreads) {
-            waitMode = hc::hcWaitModeActive;
+            waitMode = csq::hcWaitModeActive;
         } else {
-            waitMode = hc::hcWaitModeBlocked;
+            waitMode = csq::hcWaitModeBlocked;
         }
     } else if (_scheduleMode == Spin) {
-        waitMode = hc::hcWaitModeActive;
+        waitMode = csq::hcWaitModeActive;
     } else if (_scheduleMode == Yield) {
-        waitMode = hc::hcWaitModeBlocked;
+        waitMode = csq::hcWaitModeBlocked;
     } else {
         assert(0);  // bad wait mode.
     }
 
     if (HIP_WAIT_MODE == 1) {
-        waitMode = hc::hcWaitModeBlocked;
+        waitMode = csq::hcWaitModeBlocked;
     } else if (HIP_WAIT_MODE == 2) {
-        waitMode = hc::hcWaitModeActive;
+        waitMode = csq::hcWaitModeActive;
     }
 
     return waitMode;
@@ -334,7 +345,7 @@ void ihipStream_t::locked_wait() {
 void ihipStream_t::locked_streamWaitEvent(ihipEventData_t& ecd) {
     LockedAccessor_StreamCrit_t crit(_criticalData);
 
-    crit->_av.create_blocking_marker(ecd.marker(), hc::accelerator_scope);
+    crit->_av.create_blocking_marker(ecd.marker(), csq::accelerator_scope);
 }
 
 
@@ -351,8 +362,8 @@ bool ihipStream_t::locked_eventIsReady(hipEvent_t event) {
 }
 
 // Waiting on event can cause HCC to reclaim stream resources - so need to lock the stream.
-void ihipStream_t::locked_eventWaitComplete(hc::completion_future& marker,
-                                            hc::hcWaitMode waitMode) {
+void ihipStream_t::locked_eventWaitComplete(csq::completion_future& marker,
+                                            csq::hcWaitMode waitMode) {
     LockedAccessor_StreamCrit_t crit(_criticalData);
 
     marker.wait(waitMode);
@@ -361,19 +372,19 @@ void ihipStream_t::locked_eventWaitComplete(hc::completion_future& marker,
 
 // Create a marker in this stream.
 // Save state in the event so it can track the status of the event.
-hc::completion_future ihipStream_t::locked_recordEvent(hipEvent_t event) {
+csq::completion_future ihipStream_t::locked_recordEvent(hipEvent_t event) {
     // Lock the stream to prevent simultaneous access
     LockedAccessor_StreamCrit_t crit(_criticalData);
 
-    auto scopeFlag = hc::accelerator_scope;
+    auto scopeFlag = csq::accelerator_scope;
     // The env var HIP_EVENT_SYS_RELEASE sets the default,
     // The explicit flags override the env var (if specified)
     if (event->_flags & hipEventReleaseToSystem) {
-        scopeFlag = hc::system_scope;
+        scopeFlag = csq::system_scope;
     } else if (event->_flags & hipEventReleaseToDevice) {
-        scopeFlag = hc::accelerator_scope;
+        scopeFlag = csq::accelerator_scope;
     } else {
-        scopeFlag = HIP_EVENT_SYS_RELEASE ? hc::system_scope : hc::accelerator_scope;
+        scopeFlag = HIP_EVENT_SYS_RELEASE ? csq::system_scope : csq::accelerator_scope;
     }
 
     return crit->_av.create_marker(scopeFlag);
@@ -405,7 +416,7 @@ LockedAccessor_StreamCrit_t ihipStream_t::lockopen_preKernelCommand() {
 //---
 // Must be called after kernel finishes, this releases the lock on the stream so other commands can
 // submit.
-void ihipStream_t::lockclose_postKernelCommand(const char* kernelName, hc::accelerator_view* av) {
+void ihipStream_t::lockclose_postKernelCommand(const char* kernelName, csq::accelerator_view* av) {
     bool blockThisKernel = false;
 
     if (!g_hipLaunchBlockingKernels.empty()) {
@@ -422,7 +433,7 @@ void ihipStream_t::lockclose_postKernelCommand(const char* kernelName, hc::accel
     if (HIP_LAUNCH_BLOCKING || blockThisKernel) {
         // TODO - fix this so it goes through proper stream::wait() call.// direct wait OK since we
         // know the stream is locked.
-        av->wait(hc::hcWaitModeActive);
+        av->wait(csq::hcWaitModeActive);
         tprintf(DB_SYNC, "%s LAUNCH_BLOCKING for kernel '%s' completion\n", ToString(this).c_str(),
                 kernelName);
     }
@@ -525,7 +536,7 @@ void ihipDeviceCriticalBase_t<DeviceMutex>::addContext(ihipCtx_t* ctx) {
 //=================================================================================================
 // ihipDevice_t
 //=================================================================================================
-ihipDevice_t::ihipDevice_t(unsigned deviceId, unsigned deviceCnt, hc::accelerator& acc)
+ihipDevice_t::ihipDevice_t(unsigned deviceId, unsigned deviceCnt, csq::accelerator& acc)
     : _deviceId(deviceId), _acc(acc), _state(0), _criticalData(this) {
     hsa_agent_t* agent = static_cast<hsa_agent_t*>(acc.get_hsa_agent());
     if (agent) {
@@ -790,6 +801,7 @@ hipError_t ihipDevice_t::initProperties(hipDeviceProp_t* prop) {
     prop->maxGridSize[1] = (int)((grid_max_dim.y == UINT32_MAX) ? (INT32_MAX) : grid_max_dim.y);
     prop->maxGridSize[2] = (int)((grid_max_dim.z == UINT32_MAX) ? (INT32_MAX) : grid_max_dim.z);
 
+    // FIXME HSA_STATUS_ERROR_INVALID_ARGUMENT return
     // Get Max clock frequency
     err = hsa_agent_get_info(_hsaAgent, (hsa_agent_info_t)HSA_AMD_AGENT_INFO_MAX_CLOCK_FREQUENCY,
                              &prop->clockRate);
@@ -1019,7 +1031,7 @@ void ihipCtx_t::locked_syncDefaultStream(bool waitOnSelf, bool syncHost) {
     tprintf(DB_SYNC, "syncDefaultStream \n");
 
     // Vector of ops sent to each stream that will complete before ops sent to null stream:
-    std::vector<hc::completion_future> depOps;
+    std::vector<csq::completion_future> depOps;
 
     for (auto streamI = crit->const_streams().begin(); streamI != crit->const_streams().end();
          streamI++) {
@@ -1040,7 +1052,7 @@ void ihipCtx_t::locked_syncDefaultStream(bool waitOnSelf, bool syncHost) {
 
                 // The last marker will provide appropriate visibility:
                 if (!streamCrit->_av.get_is_empty()) {
-                    depOps.push_back(streamCrit->_av.create_marker(hc::accelerator_scope));
+                    depOps.push_back(streamCrit->_av.create_marker(csq::accelerator_scope));
                     tprintf(DB_SYNC, "  push marker to wait for stream=%s\n",
                             ToString(stream).c_str());
                 } else {
@@ -1057,8 +1069,8 @@ void ihipCtx_t::locked_syncDefaultStream(bool waitOnSelf, bool syncHost) {
         LockedAccessor_StreamCrit_t defaultStreamCrit(_defaultStream->_criticalData);
         tprintf(DB_SYNC, "  null-stream wait on %zu non-empty streams. sync_host=%d\n",
                 depOps.size(), syncHost);
-        hc::completion_future defaultCf = defaultStreamCrit->_av.create_blocking_marker(
-            depOps.begin(), depOps.end(), hc::accelerator_scope);
+        csq::completion_future defaultCf = defaultStreamCrit->_av.create_blocking_marker(
+            depOps.begin(), depOps.end(), csq::accelerator_scope);
         if (syncHost) {
             defaultCf.wait();  // TODO - account for active or blocking here.
         }
@@ -1380,11 +1392,12 @@ void ihipInit() {
 
     HipReadEnv();
 
-
+    // TODO schi 
+    hcs::runtime_init();
     /*
      * Build a table of valid compute devices.
      */
-    auto accs = hc::accelerator::get_all();
+    auto accs = csq::accelerator::get_all();
 
     int deviceCnt = 0;
     for (int i = 0; i < accs.size(); i++) {
@@ -1498,7 +1511,7 @@ hipStream_t ihipSyncAndResolveStream(hipStream_t stream) {
 
 
                 bool needGatherMarker = false;  // used to gather together other markers.
-                hc::completion_future dcf;
+                csq::completion_future dcf;
                 {
                     LockedAccessor_StreamCrit_t defaultStreamCrit(defaultStream->criticalData());
                     // TODO - could call create_blocking_marker(queue) or uses existing marker.
@@ -1507,7 +1520,7 @@ hipStream_t ihipSyncAndResolveStream(hipStream_t stream) {
 
                         tprintf(DB_SYNC, "  %s adding marker to default %s for dependency\n",
                                 ToString(stream).c_str(), ToString(defaultStream).c_str());
-                        dcf = defaultStreamCrit->_av.create_marker(hc::accelerator_scope);
+                        dcf = defaultStreamCrit->_av.create_marker(csq::accelerator_scope);
                     } else {
                         tprintf(DB_SYNC, "  %s skipping marker since default stream is empty\n",
                                 ToString(stream).c_str());
@@ -1519,7 +1532,7 @@ hipStream_t ihipSyncAndResolveStream(hipStream_t stream) {
                     // continuing
                     LockedAccessor_StreamCrit_t thisStreamCrit(stream->criticalData());
                     // TODO - could be "noret" version of create_blocking_marker
-                    thisStreamCrit->_av.create_blocking_marker(dcf, hc::accelerator_scope);
+                    thisStreamCrit->_av.create_blocking_marker(dcf, csq::accelerator_scope);
                     tprintf(
                         DB_SYNC,
                         "  %s adding marker to wait for freshly recorded default-stream marker \n",
@@ -1804,8 +1817,8 @@ const char* ihipErrorString(hipError_t hip_error) {
 // Returns true if copyEngineCtx can see the memory allocated on dstCtx and srcCtx.
 // The peer-list for a context controls which contexts have access to the memory allocated on that
 // context. So we check dstCtx's and srcCtx's peerList to see if the both include thisCtx.
-bool ihipStream_t::canSeeMemory(const ihipCtx_t* copyEngineCtx, const hc::AmPointerInfo* dstPtrInfo,
-                                const hc::AmPointerInfo* srcPtrInfo) {
+bool ihipStream_t::canSeeMemory(const ihipCtx_t* copyEngineCtx, const csq::AmPointerInfo* dstPtrInfo,
+                                const csq::AmPointerInfo* srcPtrInfo) {
     if (copyEngineCtx == nullptr) {
         return false;
     }
@@ -1879,13 +1892,13 @@ const char* hipMemcpyStr(unsigned memKind) {
     };
 }
 
-const char* hcMemcpyStr(hc::hcCommandKind memKind) {
+const char* hcMemcpyStr(csq::hcCommandKind memKind) {
     using namespace hc;
     switch (memKind) {
-        CASE_STRING(hcMemcpyHostToHost);
-        CASE_STRING(hcMemcpyHostToDevice);
-        CASE_STRING(hcMemcpyDeviceToHost);
-        CASE_STRING(hcMemcpyDeviceToDevice);
+        CASE_STRING(csq::hcMemcpyHostToHost);      // TODO schi add csq::
+        CASE_STRING(csq::hcMemcpyHostToDevice);
+        CASE_STRING(csq::hcMemcpyDeviceToHost);
+        CASE_STRING(csq::hcMemcpyDeviceToDevice);
         // CASE_STRING(hcMemcpyDefault);
         default:
             return ("unknown memcpyKind");
@@ -1917,9 +1930,9 @@ unsigned ihipStream_t::resolveMemcpyDirection(bool srcInDeviceMem, bool dstInDev
 
 // hipMemKind must be "resolved" to a specific direction - cannot be default.
 void ihipStream_t::resolveHcMemcpyDirection(unsigned hipMemKind,
-                                            const hc::AmPointerInfo* dstPtrInfo,
-                                            const hc::AmPointerInfo* srcPtrInfo,
-                                            hc::hcCommandKind* hcCopyDir, ihipCtx_t** copyDevice,
+                                            const csq::AmPointerInfo* dstPtrInfo,
+                                            const csq::AmPointerInfo* srcPtrInfo,
+                                            csq::hcCommandKind* hcCopyDir, ihipCtx_t** copyDevice,
                                             bool* forceUnpinnedCopy) {
     // Ignore what the user tells us and always resolve the direction:
     // Some apps apparently rely on this.
@@ -1928,16 +1941,16 @@ void ihipStream_t::resolveHcMemcpyDirection(unsigned hipMemKind,
 
     switch (hipMemKind) {
         case hipMemcpyHostToHost:
-            *hcCopyDir = hc::hcMemcpyHostToHost;
+            *hcCopyDir = csq::hcMemcpyHostToHost;
             break;
         case hipMemcpyHostToDevice:
-            *hcCopyDir = hc::hcMemcpyHostToDevice;
+            *hcCopyDir = csq::hcMemcpyHostToDevice;
             break;
         case hipMemcpyDeviceToHost:
-            *hcCopyDir = hc::hcMemcpyDeviceToHost;
+            *hcCopyDir = csq::hcMemcpyDeviceToHost;
             break;
         case hipMemcpyDeviceToDevice:
-            *hcCopyDir = hc::hcMemcpyDeviceToDevice;
+            *hcCopyDir = csq::hcMemcpyDeviceToDevice;
             break;
         default:
             throw ihipException(hipErrorRuntimeOther);
@@ -1986,7 +1999,7 @@ void ihipStream_t::resolveHcMemcpyDirection(unsigned hipMemKind,
 
 
 void printPointerInfo(unsigned dbFlag, const char* tag, const void* ptr,
-                      const hc::AmPointerInfo& ptrInfo) {
+                      const csq::AmPointerInfo& ptrInfo) {
     tprintf(dbFlag,
             "  %s=%p baseHost=%p baseDev=%p sz=%zu home_dev=%d tracked=%d isDevMem=%d "
             "registered=%d allocSeqNum=%zu, appAllocationFlags=%x, appPtr=%p\n",
@@ -1999,7 +2012,7 @@ void printPointerInfo(unsigned dbFlag, const char* tag, const void* ptr,
 // the pointer-info as returned by HC refers to the allocation
 // This routine modifies the pointer-info so it appears to refer to the specific ptr and sizeBytes.
 // TODO -remove this when HCC uses HSA pointer info functions directly.
-void tailorPtrInfo(hc::AmPointerInfo* ptrInfo, const void* ptr, size_t sizeBytes) {
+void tailorPtrInfo(csq::AmPointerInfo* ptrInfo, const void* ptr, size_t sizeBytes) {
     const char* ptrc = static_cast<const char*>(ptr);
     if (ptrInfo->_sizeBytes == 0) {
         // invalid ptrInfo, don't modify
@@ -2038,9 +2051,9 @@ void tailorPtrInfo(hc::AmPointerInfo* ptrInfo, const void* ptr, size_t sizeBytes
 };
 
 
-bool getTailoredPtrInfo(const char* tag, hc::AmPointerInfo* ptrInfo, const void* ptr,
+bool getTailoredPtrInfo(const char* tag, csq::AmPointerInfo* ptrInfo, const void* ptr,
                         size_t sizeBytes) {
-    bool tracked = (hc::am_memtracker_getinfo(ptrInfo, ptr) == AM_SUCCESS);
+    bool tracked = (csq::am_memtracker_getinfo(ptrInfo, ptr) == AM_SUCCESS);
     printPointerInfo(DB_COPY, tag, ptr, *ptrInfo);
 
     if (tracked) {
@@ -2069,13 +2082,14 @@ void ihipStream_t::locked_copySync(void* dst, const void* src, size_t sizeBytes,
         throw ihipException(hipErrorInvalidDevice);
     }
 
-    hc::accelerator acc;
+    // TODO schi hack acc to &acc since csq_pointer.h definition change
+    csq::accelerator acc;
 #if (__hcc_workweek__ >= 17332)
-    hc::AmPointerInfo dstPtrInfo(NULL, NULL, NULL, 0, acc, 0, 0);
-    hc::AmPointerInfo srcPtrInfo(NULL, NULL, NULL, 0, acc, 0, 0);
+    csq::AmPointerInfo dstPtrInfo(NULL, NULL, NULL, 0, &acc, 0, 0);
+    csq::AmPointerInfo srcPtrInfo(NULL, NULL, NULL, 0, &acc, 0, 0);
 #else
-    hc::AmPointerInfo dstPtrInfo(NULL, NULL, 0, acc, 0, 0);
-    hc::AmPointerInfo srcPtrInfo(NULL, NULL, 0, acc, 0, 0);
+    csq::AmPointerInfo dstPtrInfo(NULL, NULL, 0, &acc, 0, 0);
+    csq::AmPointerInfo srcPtrInfo(NULL, NULL, 0, &acc, 0, 0);
 #endif
     bool dstTracked = getTailoredPtrInfo("    dst", &dstPtrInfo, dst, sizeBytes);
     bool srcTracked = getTailoredPtrInfo("    src", &srcPtrInfo, src, sizeBytes);
@@ -2091,7 +2105,7 @@ void ihipStream_t::locked_copySync(void* dst, const void* src, size_t sizeBytes,
     }
 
 
-    hc::hcCommandKind hcCopyDir;
+    csq::hcCommandKind hcCopyDir;
     ihipCtx_t* copyDevice;
     bool forceUnpinnedCopy;
     resolveHcMemcpyDirection(kind, &dstPtrInfo, &srcPtrInfo, &hcCopyDir, &copyDevice,
@@ -2124,13 +2138,14 @@ void ihipStream_t::locked_copy2DSync(void* dst, const void* src, size_t width, s
         throw ihipException(hipErrorInvalidDevice);
     }
     size_t sizeBytes = width*height;
-    hc::accelerator acc;
+    // TODO schi hack acc to &acc since csq_pointer.h definition change
+    csq::accelerator acc;
 #if (__hcc_workweek__ >= 17332)
-    hc::AmPointerInfo dstPtrInfo(NULL, NULL, NULL, 0, acc, 0, 0);
-    hc::AmPointerInfo srcPtrInfo(NULL, NULL, NULL, 0, acc, 0, 0);
+    csq::AmPointerInfo dstPtrInfo(NULL, NULL, NULL, 0, &acc, 0, 0);
+    csq::AmPointerInfo srcPtrInfo(NULL, NULL, NULL, 0, &acc, 0, 0);
 #else
-    hc::AmPointerInfo dstPtrInfo(NULL, NULL, 0, acc, 0, 0);
-    hc::AmPointerInfo srcPtrInfo(NULL, NULL, 0, acc, 0, 0);
+    csq::AmPointerInfo dstPtrInfo(NULL, NULL, 0, &acc, 0, 0);
+    csq::AmPointerInfo srcPtrInfo(NULL, NULL, 0, &acc, 0, 0);
 #endif
     bool dstTracked = getTailoredPtrInfo("    dst", &dstPtrInfo, dst, sizeBytes);
     bool srcTracked = getTailoredPtrInfo("    src", &srcPtrInfo, src, sizeBytes);
@@ -2145,7 +2160,7 @@ void ihipStream_t::locked_copy2DSync(void* dst, const void* src, size_t width, s
     }
 
 
-    hc::hcCommandKind hcCopyDir;
+    csq::hcCommandKind hcCopyDir;
     ihipCtx_t* copyDevice;
     bool forceUnpinnedCopy;
     resolveHcMemcpyDirection(kind, &dstPtrInfo, &srcPtrInfo, &hcCopyDir, &copyDevice,
@@ -2162,47 +2177,51 @@ void ihipStream_t::locked_copy2DSync(void* dst, const void* src, size_t width, s
         printPointerInfo(DB_COPY, "  dst", dst, dstPtrInfo);
         printPointerInfo(DB_COPY, "  src", src, srcPtrInfo);
 
+        // FIXME missing copy2d_ext 
+        /*
         crit->_av.copy2d_ext(src, dst, width, height, srcPitch, dstPitch, hcCopyDir, srcPtrInfo, dstPtrInfo,
                            copyDevice ? &copyDevice->getDevice()->_acc : nullptr,
                            forceUnpinnedCopy);
+                           */
     }
 }
 
-void ihipStream_t::addSymbolPtrToTracker(hc::accelerator& acc, void* ptr, size_t sizeBytes) {
+void ihipStream_t::addSymbolPtrToTracker(csq::accelerator& acc, void* ptr, size_t sizeBytes) {
 #if (__hcc_workweek__ >= 17332)
-    hc::AmPointerInfo ptrInfo(NULL, ptr, ptr, sizeBytes, acc, true, false);
+    csq::AmPointerInfo ptrInfo(NULL, ptr, ptr, sizeBytes, &acc, true, false);    // TODO schi 
 #else
-    hc::AmPointerInfo ptrInfo(NULL, ptr, sizeBytes, acc, true, false);
+    csq::AmPointerInfo ptrInfo(NULL, ptr, sizeBytes, &acc, true, false);
 #endif
-    hc::am_memtracker_add(ptr, ptrInfo);
+    csq::am_memtracker_add(ptr, ptrInfo);
 }
 
-void ihipStream_t::lockedSymbolCopySync(hc::accelerator& acc, void* dst, void* src,
+void ihipStream_t::lockedSymbolCopySync(csq::accelerator& acc, void* dst, void* src,
                                         size_t sizeBytes, size_t offset, unsigned kind) {
     if (kind == hipMemcpyHostToHost) {
-        acc.memcpy_symbol(dst, (void*)src, sizeBytes, offset, Kalmar::hcMemcpyHostToHost);
+        acc.memcpy_symbol(dst, (void*)src, sizeBytes, offset, csq::hcMemcpyHostToHost);
     }
     if (kind == hipMemcpyHostToDevice) {
         acc.memcpy_symbol(dst, (void*)src, sizeBytes, offset);
     }
     if (kind == hipMemcpyDeviceToDevice) {
-        acc.memcpy_symbol(dst, (void*)src, sizeBytes, offset, Kalmar::hcMemcpyDeviceToDevice);
+        acc.memcpy_symbol(dst, (void*)src, sizeBytes, offset, csq::hcMemcpyDeviceToDevice);
     }
     if (kind == hipMemcpyDeviceToHost) {
-        acc.memcpy_symbol((void*)src, (void*)dst, sizeBytes, offset, Kalmar::hcMemcpyDeviceToHost);
+        acc.memcpy_symbol((void*)src, (void*)dst, sizeBytes, offset, csq::hcMemcpyDeviceToHost);
     }
 }
 
-void ihipStream_t::lockedSymbolCopyAsync(hc::accelerator& acc, void* dst, void* src,
+void ihipStream_t::lockedSymbolCopyAsync(csq::accelerator& acc, void* dst, void* src,
                                          size_t sizeBytes, size_t offset, unsigned kind) {
     // TODO - review - this looks broken , should not be adding pointers to tracker dynamically:
     if (kind == hipMemcpyHostToDevice) {
+    // TODO schi hack acc to &acc since csq_pointer.h definition change
 #if (__hcc_workweek__ >= 17332)
-        hc::AmPointerInfo srcPtrInfo(NULL, NULL, NULL, 0, acc, 0, 0);
+        csq::AmPointerInfo srcPtrInfo(NULL, NULL, NULL, 0, &acc, 0, 0);
 #else
-        hc::AmPointerInfo srcPtrInfo(NULL, NULL, 0, acc, 0, 0);
+        csq::AmPointerInfo srcPtrInfo(NULL, NULL, 0, &acc, 0, 0);
 #endif
-        bool srcTracked = (hc::am_memtracker_getinfo(&srcPtrInfo, src) == AM_SUCCESS);
+        bool srcTracked = (csq::am_memtracker_getinfo(&srcPtrInfo, src) == AM_SUCCESS);
         if (srcTracked) {
             addSymbolPtrToTracker(acc, dst, sizeBytes);
             locked_getAv()->copy_async((void*)src, dst, sizeBytes);
@@ -2213,12 +2232,13 @@ void ihipStream_t::lockedSymbolCopyAsync(hc::accelerator& acc, void* dst, void* 
         }
     }
     if (kind == hipMemcpyDeviceToHost) {
+    // TODO schi hack acc to &acc since csq_pointer.h definition change
 #if (__hcc_workweek__ >= 17332)
-        hc::AmPointerInfo dstPtrInfo(NULL, NULL, NULL, 0, acc, 0, 0);
+        csq::AmPointerInfo dstPtrInfo(NULL, NULL, NULL, 0, &acc, 0, 0);
 #else
-        hc::AmPointerInfo dstPtrInfo(NULL, NULL, 0, acc, 0, 0);
+        csq::AmPointerInfo dstPtrInfo(NULL, NULL, 0, &acc, 0, 0);
 #endif
-        bool dstTracked = (hc::am_memtracker_getinfo(&dstPtrInfo, dst) == AM_SUCCESS);
+        bool dstTracked = (csq::am_memtracker_getinfo(&dstPtrInfo, dst) == AM_SUCCESS);
         if (dstTracked) {
             addSymbolPtrToTracker(acc, src, sizeBytes);
             locked_getAv()->copy_async((void*)src, dst, sizeBytes);
@@ -2226,7 +2246,7 @@ void ihipStream_t::lockedSymbolCopyAsync(hc::accelerator& acc, void* dst, void* 
             LockedAccessor_StreamCrit_t crit(_criticalData);
             this->wait(crit);
             acc.memcpy_symbol((void*)src, (void*)dst, sizeBytes, offset,
-                              Kalmar::hcMemcpyDeviceToHost);
+                              csq::hcMemcpyDeviceToHost);
         }
     }
 }
@@ -2254,20 +2274,21 @@ void ihipStream_t::locked_copyAsync(void* dst, const void* src, size_t sizeBytes
         memcpy(dst, src, sizeBytes);
 
     } else {
-        hc::accelerator acc;
+        csq::accelerator acc;
+    // TODO schi hack acc to &acc since csq_pointer.h definition change
 #if (__hcc_workweek__ >= 17332)
-        hc::AmPointerInfo dstPtrInfo(NULL, NULL, NULL, 0, acc, 0, 0);
-        hc::AmPointerInfo srcPtrInfo(NULL, NULL, NULL, 0, acc, 0, 0);
+        csq::AmPointerInfo dstPtrInfo(NULL, NULL, NULL, 0, &acc, 0, 0);
+        csq::AmPointerInfo srcPtrInfo(NULL, NULL, NULL, 0, &acc, 0, 0);
 #else
-        hc::AmPointerInfo dstPtrInfo(NULL, NULL, 0, acc, 0, 0);
-        hc::AmPointerInfo srcPtrInfo(NULL, NULL, 0, acc, 0, 0);
+        csq::AmPointerInfo dstPtrInfo(NULL, NULL, 0, &acc, 0, 0);
+        csq::AmPointerInfo srcPtrInfo(NULL, NULL, 0, &acc, 0, 0);
 #endif
         tprintf(DB_COPY, "copyASync dst=%p src=%p, sz=%zu\n", dst, src, sizeBytes);
         bool dstTracked = getTailoredPtrInfo("    dst", &dstPtrInfo, dst, sizeBytes);
         bool srcTracked = getTailoredPtrInfo("    src", &srcPtrInfo, src, sizeBytes);
 
 
-        hc::hcCommandKind hcCopyDir;
+        csq::hcCommandKind hcCopyDir;
         ihipCtx_t* copyDevice;
         bool forceUnpinnedCopy;
         resolveHcMemcpyDirection(kind, &dstPtrInfo, &srcPtrInfo, &hcCopyDir, &copyDevice,
@@ -2283,7 +2304,7 @@ void ihipStream_t::locked_copyAsync(void* dst, const void* src, size_t sizeBytes
             LockedAccessor_StreamCrit_t crit(_criticalData);
 
             // Perform fast asynchronous copy - we know copyDevice != NULL based on check above
-            try {
+            // try {
                 if (HIP_FORCE_SYNC_COPY) {
                     crit->_av.copy_ext(src, dst, sizeBytes, hcCopyDir, srcPtrInfo, dstPtrInfo,
                                        &copyDevice->getDevice()->_acc, forceUnpinnedCopy);
@@ -2292,9 +2313,10 @@ void ihipStream_t::locked_copyAsync(void* dst, const void* src, size_t sizeBytes
                     crit->_av.copy_async_ext(src, dst, sizeBytes, hcCopyDir, srcPtrInfo, dstPtrInfo,
                                              &copyDevice->getDevice()->_acc);
                 }
-            } catch (Kalmar::runtime_exception) {
-                throw ihipException(hipErrorRuntimeOther);
-            };
+            // TODO schi need add back exeception
+            // } catch (Kalmar::runtime_exception) {
+            //     throw ihipException(hipErrorRuntimeOther);
+            // };
 
 
             if (HIP_API_BLOCKING) {
@@ -2346,21 +2368,22 @@ void ihipStream_t::locked_copy2DAsync(void* dst, const void* src, size_t width, 
         tprintf(DB_COPY, "locked_copy2DAsync bad ctx or device\n");
         throw ihipException(hipErrorInvalidDevice);
     }
-    hc::accelerator acc;
+    csq::accelerator acc;
     size_t sizeBytes = width*height;
+    // TODO schi hack acc to &acc since csq_pointer.h definition change
 #if (__hcc_workweek__ >= 17332)
-    hc::AmPointerInfo dstPtrInfo(NULL, NULL, NULL, 0, acc, 0, 0);
-    hc::AmPointerInfo srcPtrInfo(NULL, NULL, NULL, 0, acc, 0, 0);
+    csq::AmPointerInfo dstPtrInfo(NULL, NULL, NULL, 0, &acc, 0, 0);
+    csq::AmPointerInfo srcPtrInfo(NULL, NULL, NULL, 0, &acc, 0, 0);
 #else
-    hc::AmPointerInfo dstPtrInfo(NULL, NULL, 0, acc, 0, 0);
-    hc::AmPointerInfo srcPtrInfo(NULL, NULL, 0, acc, 0, 0);
+    csq::AmPointerInfo dstPtrInfo(NULL, NULL, 0, &acc, 0, 0);
+    csq::AmPointerInfo srcPtrInfo(NULL, NULL, 0, &acc, 0, 0);
 #endif
     tprintf(DB_COPY, "copy2DAsync dst=%p src=%p, sz=%zu\n", dst, src, sizeBytes);
     bool dstTracked = getTailoredPtrInfo("    dst", &dstPtrInfo, dst, sizeBytes);
     bool srcTracked = getTailoredPtrInfo("    src", &srcPtrInfo, src, sizeBytes);
 
 
-    hc::hcCommandKind hcCopyDir;
+    csq::hcCommandKind hcCopyDir;
     ihipCtx_t* copyDevice;
     bool forceUnpinnedCopy;
     resolveHcMemcpyDirection(kind, &dstPtrInfo, &srcPtrInfo, &hcCopyDir, &copyDevice,
@@ -2372,7 +2395,8 @@ void ihipStream_t::locked_copy2DAsync(void* dst, const void* src, size_t width, 
         copyDevice /*code below assumes this is !nullptr*/) {
         LockedAccessor_StreamCrit_t crit(_criticalData);
 
-        try {
+        //try {
+        /* FIXME missing copy2d_xxx
              if (HIP_FORCE_SYNC_COPY) {
                  crit->_av.copy2d_ext(src, dst, width, height, srcPitch, dstPitch, hcCopyDir, srcPtrInfo, dstPtrInfo,
                            &copyDevice->getDevice()->_acc,
@@ -2382,9 +2406,11 @@ void ihipStream_t::locked_copy2DAsync(void* dst, const void* src, size_t width, 
                  crit->_av.copy2d_async_ext(src, dst, width, height, srcPitch, dstPitch, hcCopyDir, srcPtrInfo, dstPtrInfo,
                                           &copyDevice->getDevice()->_acc);
              }
-         } catch (Kalmar::runtime_exception) {
-                throw ihipException(hipErrorRuntimeOther);
-         };
+             */
+         // TODO schi need add back exeception
+         //} catch (Kalmar::runtime_exception) {
+         //       throw ihipException(hipErrorRuntimeOther);
+         //};
 
          if (HIP_API_BLOCKING) {
              tprintf(DB_SYNC, "%s LAUNCH_BLOCKING for completion of hipMemcpy2DAsync(sz=%zu)\n",
@@ -2395,9 +2421,11 @@ void ihipStream_t::locked_copy2DAsync(void* dst, const void* src, size_t width, 
     } else {
          //Do sync 2D copy
          LockedAccessor_StreamCrit_t crit(_criticalData);
+         /* FIXME missing copy2dxxx
          crit->_av.copy2d_ext(src, dst, width, height, srcPitch, dstPitch, hcCopyDir, srcPtrInfo, dstPtrInfo,
                            copyDevice ? &copyDevice->getDevice()->_acc : nullptr,
                            forceUnpinnedCopy);
+                           */
     }
 }
 
@@ -2429,7 +2457,7 @@ hipError_t hipProfilerStop() {
 // HCC-specific accessor functions:
 
 //---
-hipError_t hipHccGetAccelerator(int deviceId, hc::accelerator* acc) {
+hipError_t hipHccGetAccelerator(int deviceId, csq::accelerator* acc) {
     HIP_INIT_API(hipHccGetAccelerator, deviceId, acc);
 
     const ihipDevice_t* device = ihipGetDevice(deviceId);
@@ -2445,7 +2473,7 @@ hipError_t hipHccGetAccelerator(int deviceId, hc::accelerator* acc) {
 
 
 //---
-hipError_t hipHccGetAcceleratorView(hipStream_t stream, hc::accelerator_view** av) {
+hipError_t hipHccGetAcceleratorView(hipStream_t stream, csq::accelerator_view** av) {
     HIP_INIT_API(hipHccGetAcceleratorView, stream, av);
 
     if (stream == hipStreamNull) {
@@ -2465,7 +2493,7 @@ hipError_t hipHccGetAcceleratorView(hipStream_t stream, hc::accelerator_view** a
 namespace hip_impl {
     std::vector<hsa_agent_t> all_hsa_agents() {
         std::vector<hsa_agent_t> r{};
-        for (auto&& acc : hc::accelerator::get_all()) {
+        for (auto&& acc : csq::accelerator::get_all()) {
             const auto agent = acc.get_hsa_agent();
 
             if (!agent || !acc.is_hsa_accelerator()) continue;

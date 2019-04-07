@@ -23,7 +23,10 @@ THE SOFTWARE.
 #ifndef HIP_INCLUDE_HCC_DETAIL_HIP_TEXTURE_H
 #define HIP_INCLUDE_HCC_DETAIL_HIP_TEXTURE_H
 
-#include <hip/hcc_detail/texture_types.h>
+#include <hip/clang_detail/texture_types.h>
+
+// TODO schi add 
+#include "inc/hcs_ext_image.h"
 
 struct hipTexture {
     hipResourceDesc resDesc;

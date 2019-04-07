@@ -3,14 +3,20 @@
 
 #include <string.h>
 
-#include "hsa/hsa.h"
-#include "hsa/hsa_ext_amd.h"
+// TODO schi 
+#include "inc/hcs.h"
+#include "inc/hcs_ext.h"
+// #include "hsa/hsa.h"
+// #include "hsa/hsa_ext_amd.h"
 
 #include "hip/hip_runtime.h"
 #include "hip_hcc_internal.h"
 #include "trace_helper.h"
 
 #include "hip_texture.h"
+
+
+// TODO schi change all hc:: to csq::
 
 static std::map<hipTextureObject_t, hipTexture*> textureHash;
 
@@ -207,7 +213,7 @@ hipError_t hipCreateTextureObject(hipTextureObject_t* pTexObject, const hipResou
 
     auto ctx = ihipGetTlsDefaultCtx();
     if (ctx) {
-        hc::accelerator acc = ctx->getDevice()->_acc;
+        csq::accelerator acc = ctx->getDevice()->_acc;
         auto device = ctx->getWriteableDevice();
 
         hsa_agent_t* agent = static_cast<hsa_agent_t*>(acc.get_hsa_agent());
@@ -317,7 +323,7 @@ hipError_t hipDestroyTextureObject(hipTextureObject_t textureObject) {
 
     auto ctx = ihipGetTlsDefaultCtx();
     if (ctx) {
-        hc::accelerator acc = ctx->getDevice()->_acc;
+        csq::accelerator acc = ctx->getDevice()->_acc;
         auto device = ctx->getWriteableDevice();
 
         hsa_agent_t* agent = static_cast<hsa_agent_t*>(acc.get_hsa_agent());
@@ -393,7 +399,7 @@ hipError_t ihipBindTextureImpl(int dim, enum hipTextureReadMode readMode, size_t
         *offset = 0;
     auto ctx = ihipGetTlsDefaultCtx();
     if (ctx) {
-        hc::accelerator acc = ctx->getDevice()->_acc;
+        csq::accelerator acc = ctx->getDevice()->_acc;
         auto device = ctx->getWriteableDevice();
 
         hsa_agent_t* agent = static_cast<hsa_agent_t*>(acc.get_hsa_agent());
@@ -464,7 +470,7 @@ hipError_t ihipBindTexture2DImpl(int dim, enum hipTextureReadMode readMode, size
         *offset = 0;
     auto ctx = ihipGetTlsDefaultCtx();
     if (ctx) {
-        hc::accelerator acc = ctx->getDevice()->_acc;
+        csq::accelerator acc = ctx->getDevice()->_acc;
         auto device = ctx->getWriteableDevice();
 
         hsa_agent_t* agent = static_cast<hsa_agent_t*>(acc.get_hsa_agent());
@@ -535,7 +541,7 @@ hipError_t ihipBindTextureToArrayImpl(int dim, enum hipTextureReadMode readMode,
     hipTextureObject_t& textureObject = tex->textureObject;
     auto ctx = ihipGetTlsDefaultCtx();
     if (ctx) {
-        hc::accelerator acc = ctx->getDevice()->_acc;
+        csq::accelerator acc = ctx->getDevice()->_acc;
         auto device = ctx->getWriteableDevice();
 
         hsa_agent_t* agent = static_cast<hsa_agent_t*>(acc.get_hsa_agent());
@@ -634,7 +640,7 @@ hipError_t ihipUnbindTextureImpl(const hipTextureObject_t& textureObject) {
 
     auto ctx = ihipGetTlsDefaultCtx();
     if (ctx) {
-        hc::accelerator acc = ctx->getDevice()->_acc;
+        csq::accelerator acc = ctx->getDevice()->_acc;
         auto device = ctx->getWriteableDevice();
 
         hsa_agent_t* agent = static_cast<hsa_agent_t*>(acc.get_hsa_agent());

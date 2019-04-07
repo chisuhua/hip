@@ -20,7 +20,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 */
 
-#include "hip/hcc_detail/grid_launch_GGL.hpp"
+// TODO schi #include "hip/hcc_detail/grid_launch_GGL.hpp"
 
 #if __hcc_workweek__ >= 17481
 #include "functional_grid_launch.inl"

@@ -27,6 +27,9 @@ THE SOFTWARE.
 #include "trace_helper.h"
 
 
+// TODO schi change all csq:: to csq::
+// TODO schi change all hc:: to csq::
+
 //-------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------
 // Stream
@@ -41,9 +44,9 @@ enum queue_priority
 #else
 enum queue_priority
 {
-    priority_high = Kalmar::priority_high,
-    priority_normal = Kalmar::priority_normal,
-    priority_low = Kalmar::priority_low
+    priority_high = csq::priority_high,
+    priority_normal = csq::priority_normal,
+    priority_low = csq::priority_low
 };
 #endif
 
@@ -57,7 +60,7 @@ hipError_t ihipStreamCreate(hipStream_t* stream, unsigned int flags, int priorit
         if (HIP_FORCE_NULL_STREAM) {
             *stream = 0;
         } else {
-            hc::accelerator acc = ctx->getWriteableDevice()->_acc;
+            csq::accelerator acc = ctx->getWriteableDevice()->_acc;
 
             // TODO - se try-catch loop to detect memory exception?
             //
@@ -74,7 +77,7 @@ hipError_t ihipStreamCreate(hipStream_t* stream, unsigned int flags, int priorit
 #if defined(__HCC__) && (__hcc_minor__ < 3)
                 auto istream = new ihipStream_t(ctx, acc.create_view(), flags);
 #else
-                auto istream = new ihipStream_t(ctx, acc.create_view(Kalmar::execute_any_order, Kalmar::queuing_mode_automatic, (Kalmar::queue_priority)priority), flags);
+                auto istream = new ihipStream_t(ctx, acc.create_view(csq::execute_any_order, csq::queuing_mode_automatic, (csq::queue_priority)priority), flags);
 #endif
 
                 ctxCrit->addStream(istream);
@@ -139,8 +142,8 @@ hipError_t hipStreamWaitEvent(hipStream_t stream, hipEvent_t event, unsigned int
             // return _stream->locked_eventWaitComplete(this, waitMode);
             //
             ecd._stream->locked_eventWaitComplete(
-                ecd.marker(), (event->_flags & hipEventBlockingSync) ? hc::hcWaitModeBlocked
-                                                                     : hc::hcWaitModeActive);
+                ecd.marker(), (event->_flags & hipEventBlockingSync) ? csq::hcWaitModeBlocked
+                                                                     : csq::hcWaitModeActive);
         } else {
             stream = ihipSyncAndResolveStream(stream);
             // This will use create_blocking_marker to wait on the specified queue.

@@ -23,15 +23,33 @@ THE SOFTWARE.
 #ifndef HIP_SRC_HIP_HCC_INTERNAL_H
 #define HIP_SRC_HIP_HCC_INTERNAL_H
 
-#include <hc.hpp>
-#include <hsa/hsa.h>
+
+//TODO schi #include <hc.hpp>
+// #include <inc/csq.h>
+#include "inc/csq_accelerator.h"
+
+// TODO schi add
+#include "inc/hcs_executable.h"
+#include "inc/hcs.h"
+
+// #include <hc.hpp>
+// #include <hsa/hsa.h>
 #include <unordered_map>
 #include <stack>
 
-#include "hsa/hsa_ext_amd.h"
-#include "hip/hip_runtime.h"
+#include "inc/hcs_ext.h"
+// #include "hsa/hsa_ext_amd.h"
+// TODO schi temp for cc.sh #include "hip/hip_runtime.h"
 #include "hip_util.h"
 #include "env.h"
+
+// TODO add for hipError_t
+// #include "hip/hip_runtime.h"
+
+// TODO schi add for HIP_CB_SPAWNER_OBJECT
+#include "../include/hip/clang_detail/hip_prof_api.h"
+// TODO schi add for gl_dim3 used in line:1000
+#include "../include/hip/clang_detail/grid_launch.h"
 
 
 #if (__hcc_workweek__ < 16354)
@@ -63,7 +81,8 @@ extern int HIP_API_BLOCKING;
 
 extern int HIP_PRINT_ENV;
 extern int HIP_PROFILE_API;
-// extern int HIP_TRACE_API;
+// TODO schi uncomment this for hip_memory.cpp compile
+extern int HIP_TRACE_API;
 extern int HIP_ATP;
 extern int HIP_DB;
 extern int HIP_STAGING_SIZE;    /* size of staging buffers, in KB */
@@ -178,7 +197,9 @@ extern const char* API_COLOR_END;
 // 0x2 = prints a simple message with function name + return code when function exits.
 // 0x3 = print both.
 // Must be enabled at runtime with HIP_TRACE_API
-#define COMPILE_HIP_TRACE_API 0x3
+// #define COMPILE_HIP_TRACE_API 0x3
+// TODO schi disable trace
+#define COMPILE_HIP_TRACE_API 0x2
 
 
 // Compile code that generates trace markers for CodeXL ATP at HIP function begin/end.
@@ -260,7 +281,7 @@ static const DbName dbName[] = {
 #endif
 
 
-static inline uint64_t getTicks() { return hc::get_system_ticks(); }
+static inline uint64_t getTicks() { return csq::get_system_ticks(); }
 
 //---
 extern uint64_t recordApiTrace(std::string* fullStr, const std::string& apiStr);
@@ -285,7 +306,11 @@ extern uint64_t recordApiTrace(std::string* fullStr, const std::string& apiStr);
 
 #else
 // Swallow API_TRACE
-#define API_TRACE(IS_CMD, ...) tls_tidInfo.incApiSeqNum();
+#define API_TRACE(IS_CMD, ...)                                                                     \
+    uint64_t hipApiStartTick = 0;                                                                  \
+    {                                                                                              \
+        tls_tidInfo.incApiSeqNum();                                                                \
+    }
 #endif
 
 
@@ -476,7 +501,7 @@ struct LockedBase {
 template <typename MUTEX_TYPE>
 class ihipStreamCriticalBase_t : public LockedBase<MUTEX_TYPE> {
    public:
-    ihipStreamCriticalBase_t(ihipStream_t* parentStream, hc::accelerator_view av)
+    ihipStreamCriticalBase_t(ihipStream_t* parentStream, csq::accelerator_view av)
         : _kernelCnt(0), _av(av), _parent(parentStream){};
 
     ~ihipStreamCriticalBase_t() {}
@@ -503,7 +528,7 @@ class ihipStreamCriticalBase_t : public LockedBase<MUTEX_TYPE> {
     ihipStream_t* _parent;
     uint32_t _kernelCnt;  // Count of inflight kernels in this stream.  Reset at ::wait().
 
-    hc::accelerator_view _av;
+    csq::accelerator_view _av;
 
    private:
 };
@@ -528,7 +553,7 @@ class ihipStream_t {
     typedef uint64_t SeqNum_t;
 
     // TODOD -make av a reference to avoid shared_ptr overhead?
-    ihipStream_t(ihipCtx_t* ctx, hc::accelerator_view av, unsigned int flags);
+    ihipStream_t(ihipCtx_t* ctx, csq::accelerator_view av, unsigned int flags);
     ~ihipStream_t();
 
     // kind is hipMemcpyKind
@@ -542,40 +567,40 @@ class ihipStream_t {
 
     void locked_copy2DAsync(void* dst, const void* src, size_t width, size_t height, size_t srcPitch, size_t dstPitch, unsigned kind);
 
-    void lockedSymbolCopySync(hc::accelerator& acc, void* dst, void* src, size_t sizeBytes,
+    void lockedSymbolCopySync(csq::accelerator& acc, void* dst, void* src, size_t sizeBytes,
                               size_t offset, unsigned kind);
-    void lockedSymbolCopyAsync(hc::accelerator& acc, void* dst, void* src, size_t sizeBytes,
+    void lockedSymbolCopyAsync(csq::accelerator& acc, void* dst, void* src, size_t sizeBytes,
                                size_t offset, unsigned kind);
 
     //---
     // Member functions that begin with locked_ are thread-safe accessors - these acquire / release
     // the critical mutex.
     LockedAccessor_StreamCrit_t lockopen_preKernelCommand();
-    void lockclose_postKernelCommand(const char* kernelName, hc::accelerator_view* av);
+    void lockclose_postKernelCommand(const char* kernelName, csq::accelerator_view* av);
 
 
     void locked_wait();
 
-    hc::accelerator_view* locked_getAv() {
+    csq::accelerator_view* locked_getAv() {
         LockedAccessor_StreamCrit_t crit(_criticalData);
         return &(crit->_av);
     };
 
     void locked_streamWaitEvent(ihipEventData_t& event);
-    hc::completion_future locked_recordEvent(hipEvent_t event);
+    csq::completion_future locked_recordEvent(hipEvent_t event);
 
     bool locked_eventIsReady(hipEvent_t event);
-    void locked_eventWaitComplete(hc::completion_future& marker, hc::hcWaitMode waitMode);
+    void locked_eventWaitComplete(csq::completion_future& marker, csq::hcWaitMode waitMode);
 
     ihipStreamCritical_t& criticalData() { return _criticalData; };
 
     //---
-    hc::hcWaitMode waitMode() const;
+    csq::hcWaitMode waitMode() const;
 
     // Use this if we already have the stream critical data mutex:
     void wait(LockedAccessor_StreamCrit_t& crit);
 
-    void launchModuleKernel(hc::accelerator_view av, hsa_signal_t signal, uint32_t blockDimX,
+    void launchModuleKernel(csq::accelerator_view av, hsa_signal_t signal, uint32_t blockDimX,
                             uint32_t blockDimY, uint32_t blockDimZ, uint32_t gridDimX,
                             uint32_t gridDimY, uint32_t gridDimZ, uint32_t groupSegmentSize,
                             uint32_t sharedMemBytes, void* kernarg, size_t kernSize,
@@ -601,14 +626,14 @@ class ihipStream_t {
    private:
     // The unsigned return is hipMemcpyKind
     unsigned resolveMemcpyDirection(bool srcInDeviceMem, bool dstInDeviceMem);
-    void resolveHcMemcpyDirection(unsigned hipMemKind, const hc::AmPointerInfo* dstPtrInfo,
-                                  const hc::AmPointerInfo* srcPtrInfo, hc::hcCommandKind* hcCopyDir,
+    void resolveHcMemcpyDirection(unsigned hipMemKind, const csq::AmPointerInfo* dstPtrInfo,
+                                  const csq::AmPointerInfo* srcPtrInfo, csq::hcCommandKind* hcCopyDir,
                                   ihipCtx_t** copyDevice, bool* forceUnpinnedCopy);
 
-    bool canSeeMemory(const ihipCtx_t* thisCtx, const hc::AmPointerInfo* dstInfo,
-                      const hc::AmPointerInfo* srcInfo);
+    bool canSeeMemory(const ihipCtx_t* thisCtx, const csq::AmPointerInfo* dstInfo,
+                      const csq::AmPointerInfo* srcInfo);
 
-    void addSymbolPtrToTracker(hc::accelerator& acc, void* ptr, size_t sizeBytes);
+    void addSymbolPtrToTracker(csq::accelerator& acc, void* ptr, size_t sizeBytes);
 
 
    public:  // TODO - move private
@@ -666,8 +691,8 @@ struct ihipEventData_t {
         _type = hipEventTypeIndependent;
     };
 
-    void marker(const hc::completion_future& marker) { _marker = marker; };
-    hc::completion_future& marker() { return _marker; }
+    void marker(const csq::completion_future& marker) { _marker = marker; };
+    csq::completion_future& marker() { return _marker; }
     uint64_t timestamp() const { return _timestamp; };
     ihipEventType_t type() const { return _type; };
 
@@ -677,7 +702,7 @@ struct ihipEventData_t {
                           // stream when recorded
     uint64_t _timestamp;  // store timestamp, may be set on host or by marker.
    private:
-    hc::completion_future _marker;
+    csq::completion_future _marker;
 };
 
 
@@ -706,7 +731,7 @@ typedef LockedAccessor<ihipEventCritical_t> LockedAccessor_EventCrit_t;
 class ihipEvent_t {
    public:
     explicit ihipEvent_t(unsigned flags);
-    void attachToCompletionFuture(const hc::completion_future* cf, hipStream_t stream,
+    void attachToCompletionFuture(const csq::completion_future* cf, hipStream_t stream,
                                   ihipEventType_t eventType);
     std::pair<hipEventStatus_t, uint64_t> refreshEventStatus();  // returns pair <state, timestamp>
 
@@ -765,7 +790,7 @@ typedef LockedAccessor<ihipDeviceCritical_t> LockedAccessor_DeviceCrit_t;
 // Multiple contexts can point to same device.
 class ihipDevice_t {
    public:
-    ihipDevice_t(unsigned deviceId, unsigned deviceCnt, hc::accelerator& acc);
+    ihipDevice_t(unsigned deviceId, unsigned deviceCnt, csq::accelerator& acc);
     ~ihipDevice_t();
 
     // Accessors:
@@ -777,7 +802,7 @@ class ihipDevice_t {
    public:
     unsigned _deviceId;  // device ID
 
-    hc::accelerator _acc;
+    csq::accelerator _acc;
     hsa_agent_t _hsaAgent;  // hsa agent handle
 
     //! Number of compute units supported by the device:

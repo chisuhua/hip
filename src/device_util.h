@@ -23,7 +23,7 @@ THE SOFTWARE.
 #ifndef DEVICE_UTIL_H
 #define DEVICE_UTIL_H
 
-#include <hip/hcc_detail/hip_runtime.h>
+#include <hip/clang_detail/hip_runtime.h>
 
 /*
  Heap size computation for malloc and free device functions.

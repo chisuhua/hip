@@ -23,7 +23,7 @@ THE SOFTWARE.
 #include "hip/hip_runtime.h"
 #include "hip_hcc_internal.h"
 #include "trace_helper.h"
-#include "device_util.h"
+// TODO schi #include "device_util.h"
 
 //-------------------------------------------------------------------------------------------------
 // Devices
