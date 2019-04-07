@@ -74,6 +74,7 @@ sub can_run {
 $CUDA_PATH=$ENV{'CUDA_PATH'} // '/usr/local/cuda';
 $HCC_HOME=$ENV{'HCC_HOME'} // '/opt/rocm/hcc';
 $HSA_PATH=$ENV{'HSA_PATH'} // '/opt/rocm/hsa';
+$HCS_ROOT=$ENV{'HCS_ROOT'} // '/opt/rocm/hsa';
 
 #---
 #HIP_PLATFORM controls whether to use NVCC or HCC for compilation:
@@ -93,6 +94,9 @@ $HIP_PATH=$ENV{'HIP_PATH'} // Cwd::realpath (dirname (dirname $0)); # use parent
 
 if ($HIP_PLATFORM eq "hcc") {
     $CPP_CONFIG= " -D__HIP_PLATFORM_HCC__=   -I$HIP_PATH/include -I$HCC_HOME/include";
+}
+if ($HIP_PLATFORM eq "mlcc") {
+    $CPP_CONFIG= " -D__HIP_PLATFORM_CLANG__=   -I$HIP_PATH/include -I$HCS_ROOT/include";
 }
 if ($HIP_PLATFORM eq "nvcc") {
     $CPP_CONFIG = " -D__HIP_PLATFORM_NVCC__=  -I$HIP_PATH/include -I$CUDA_PATH/include";

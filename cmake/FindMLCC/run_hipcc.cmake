@@ -22,16 +22,27 @@ endif()
 
 # Set these up as variables to make reading the generated file easier
 set(HIP_HIPCC_EXECUTABLE "@HIP_HIPCC_EXECUTABLE@") # path
+
+# TODO schi add -g hard code
+#set(HIP_HIPCC_FLAGS "@HIP_HIPCC_FLAGS@") # path
+
+set(HIP_HIPCC_FLAGS_DEBUG "@HIP_HIPCC_FLAGS_DEBUG@") # path
 set(HIP_HIPCONFIG_EXECUTABLE "@HIP_HIPCONFIG_EXECUTABLE@") #path
 set(HIP_HOST_COMPILER "@HIP_HOST_COMPILER@") # path
 set(CMAKE_COMMAND "@CMAKE_COMMAND@") # path
 set(HIP_run_make2cmake "@HIP_run_make2cmake@") # path
 set(HCC_HOME "@HCC_HOME@") #path
+set(MLCC "@MLCC@") #path
 
 @HIP_HOST_FLAGS@
 @_HIP_HIPCC_FLAGS@
 @_HIP_HCC_FLAGS@
+@_HIP_MLCC_FLAGS@
 @_HIP_NVCC_FLAGS@
+
+# TODO schi add -g hard code
+set(HIP_HIPCC_FLAGS -g) # path
+
 set(HIP_HIPCC_INCLUDE_ARGS "@HIP_HIPCC_INCLUDE_ARGS@") # list (needs to be in quotes to handle spaces properly)
 
 set(cmake_dependency_file "@cmake_dependency_file@") # path
@@ -47,6 +58,8 @@ if(NOT host_flag)
             set(ENV{HCC_HOME} ${HCC_HOME})
         endif()
         set(__CC_FLAGS ${HIP_HIPCC_FLAGS} ${HIP_HCC_FLAGS} ${HIP_HIPCC_FLAGS_${build_configuration}} ${HIP_HCC_FLAGS_${build_configuration}})
+    elseif(HIP_PLATFORM STREQUAL "mlcc")
+        set(__CC_FLAGS ${HIP_HIPCC_FLAGS} ${HIP_MLCC_FLAGS} ${HIP_HIPCC_FLAGS_${build_configuration}} ${HIP_MLCC_FLAGS_${build_configuration}})
     else()
         set(__CC_FLAGS ${HIP_HIPCC_FLAGS} ${HIP_NVCC_FLAGS} ${HIP_HIPCC_FLAGS_${build_configuration}} ${HIP_NVCC_FLAGS_${build_configuration}})
     endif()
@@ -93,55 +106,55 @@ hip_execute_process(
     COMMAND "${CMAKE_COMMAND}" -E remove "${generated_file}"
     )
 
-# Generate the dependency file
-hip_execute_process(
-    "Generating dependency file: ${cmake_dependency_file}.pre"
-    COMMAND "${__CC}"
-    -M
-    "${source_file}"
-    -o "${cmake_dependency_file}.pre"
-    ${__CC_FLAGS}
-    ${__CC_INCLUDES}
-    )
-
-if(HIP_result)
-    message(FATAL_ERROR "Error generating ${generated_file}")
-endif()
-
-# Generate the cmake readable dependency file to a temp file
-hip_execute_process(
-    "Generating temporary cmake readable file: ${cmake_dependency_file}.tmp"
-    COMMAND "${CMAKE_COMMAND}"
-    -D "input_file:FILEPATH=${cmake_dependency_file}.pre"
-    -D "output_file:FILEPATH=${cmake_dependency_file}.tmp"
-    -D "verbose=${verbose}"
-    -P "${HIP_run_make2cmake}"
-    )
-
-if(HIP_result)
-    message(FATAL_ERROR "Error generating ${generated_file}")
-endif()
-
-# Copy the file if it is different
-hip_execute_process(
-    "Copy if different ${cmake_dependency_file}.tmp to ${cmake_dependency_file}"
-    COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${cmake_dependency_file}.tmp" "${cmake_dependency_file}"
-    )
-
-if(HIP_result)
-    message(FATAL_ERROR "Error generating ${generated_file}")
-endif()
-
-# Delete the temporary file
-hip_execute_process(
-    "Removing ${cmake_dependency_file}.tmp and ${cmake_dependency_file}.pre"
-    COMMAND "${CMAKE_COMMAND}" -E remove "${cmake_dependency_file}.tmp" "${cmake_dependency_file}.pre"
-    )
-
-if(HIP_result)
-    message(FATAL_ERROR "Error generating ${generated_file}")
-endif()
-
+## Generate the dependency file
+#hip_execute_process(
+#    "Generating dependency file: ${cmake_dependency_file}.pre"
+#    COMMAND "${__CC}"
+#    -M
+#    "${source_file}"
+#    -o "${cmake_dependency_file}.pre"
+#    ${__CC_FLAGS}
+#    ${__CC_INCLUDES}
+#    )
+#
+#if(HIP_result)
+#    message(FATAL_ERROR "Error generating ${generated_file}")
+#endif()
+#
+## Generate the cmake readable dependency file to a temp file
+#hip_execute_process(
+#    "Generating temporary cmake readable file: ${cmake_dependency_file}.tmp"
+#    COMMAND "${CMAKE_COMMAND}"
+#    -D "input_file:FILEPATH=${cmake_dependency_file}.pre"
+#    -D "output_file:FILEPATH=${cmake_dependency_file}.tmp"
+#    -D "verbose=${verbose}"
+#    -P "${HIP_run_make2cmake}"
+#    )
+#
+#if(HIP_result)
+#    message(FATAL_ERROR "Error generating ${generated_file}")
+#endif()
+#
+## Copy the file if it is different
+#hip_execute_process(
+#    "Copy if different ${cmake_dependency_file}.tmp to ${cmake_dependency_file}"
+#    COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${cmake_dependency_file}.tmp" "${cmake_dependency_file}"
+#    )
+#
+#if(HIP_result)
+#    message(FATAL_ERROR "Error generating ${generated_file}")
+#endif()
+#
+## Delete the temporary file
+#hip_execute_process(
+#    "Removing ${cmake_dependency_file}.tmp and ${cmake_dependency_file}.pre"
+#    COMMAND "${CMAKE_COMMAND}" -E remove "${cmake_dependency_file}.tmp" "${cmake_dependency_file}.pre"
+#    )
+#
+#if(HIP_result)
+#    message(FATAL_ERROR "Error generating ${generated_file}")
+#endif()
+#
 # Generate the output file
 hip_execute_process(
     "Generating ${generated_file}"

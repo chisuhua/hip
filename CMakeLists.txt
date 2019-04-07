@@ -47,6 +47,7 @@ add_to_config(_versionInfo HIP_VERSION_PATCH)
 # Configure variables
 #############################
 # Determine HIP_PLATFORM
+set(HIP_PLATFORM mlcc)
 if(NOT DEFINED HIP_PLATFORM)
     if(NOT DEFINED ENV{HIP_PLATFORM})
         execute_process(COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/bin/hipconfig --platform
@@ -60,6 +61,8 @@ message(STATUS "HIP Platform: " ${HIP_PLATFORM})
 
 # Determine HIP_COMPILER
 # Either hcc or clang; default is hcc
+# TODO schi add
+set(HIP_COMPILER clang)
 if(NOT DEFINED HIP_COMPILER)
     if(NOT DEFINED ENV{HIP_COMPILER})
         set(HIP_COMPILER "hcc" CACHE STRING "HIP Compiler")
@@ -196,6 +199,8 @@ if (HIP_PLATFORM STREQUAL "hcc")
     add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/lpl_ca)
 endif ()
 
+set(MLCC $ENV{MLCC})
+
 # Build hip_hcc if platform is hcc
 if(HIP_PLATFORM STREQUAL "hcc")
     include_directories(${PROJECT_SOURCE_DIR}/include)
@@ -266,8 +271,96 @@ if(HIP_PLATFORM STREQUAL "hcc")
     endif()
 
     # Generate .hipInfo
-    file(WRITE "${PROJECT_BINARY_DIR}/.hipInfo" ${_buildInfo})
+    #file(WRITE "${PROJECT_BINARY_DIR}/.hipInfo" ${_buildInfo})
+elseif(HIP_PLATFORM STREQUAL "mlcc")
+    include_directories(${PROJECT_SOURCE_DIR}/include)
+    set(HIP_CLANG_BUILD_FLAGS)
+    set(HCS_ROOT $ENV{HCS_ROOT})
+    set(HCS_LD_FLAGS $ENV{HCS_LD_FLAGS})
+    set(MLCC_CLANG_INCLUDE_DIR ${MLCC}/lib/clang/9.0.0/include/)
+    #if(COMPILE_HIP_ATP_MARKER)
+    #    include_directories(/opt/rocm/profiler/CXLActivityLogger/include)
+    #    set(HIP_CLANG_BUILD_FLAGS "${HIP_CLANG_BUILD_FLAGS} -DCOMPILE_HIP_ATP_MARKER=1")
+    #endif()
+
+    # Add HIP_VERSION to CMAKE_<LANG>_FLAGS
+    set(HIP_VERSION_PATCH 18072)
+    set(HIP_CLANG_BUILD_FLAGS "${HIP_CLANG_BUILD_FLAGS} -std=c++14 -DHIP_VERSION_MAJOR=${HIP_VERSION_MAJOR} -DHIP_VERSION_MINOR=${HIP_VERSION_MINOR} -DHIP_VERSION_PATCH=${HIP_VERSION_PATCH}")
+
+    # Add remaining flags
+    execute_process(COMMAND "${MLCC}/bin/llvm-config --cxxflags" OUTPUT_VARIABLE CLANG_CXX_FLAGS)
+    set(HIP_CLANG_BUILD_FLAGS "${HIP_CLANG_BUILD_FLAGS} -fPIC ${CLANG_CXX_FLAGS} -I${HCS_ROOT}/include -I${HCS_ROOT}/include/platform -I${HCS_ROOT}/include/executable -I${HCS_ROOT}/include/queue -I${HCS_ROOT}/include/device -I${HCS_ROOT}/include/loader -I${MLCC_CLANG_INCLUDE_DIR}")
+
+    # Set compiler and compiler flags
+    #set(CMAKE_CXX_COMPILER "${MLCC}/bin/clang++")
+    set(CMAKE_CXX_COMPILER "${MLCC}/bin/mlcc")
+    #set(CMAKE_C_COMPILER   "${MLCC}/bin/clang")
+    set(CMAKE_C_COMPILER   "${MLCC}/bin/mlcc")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${HIP_CLANG_BUILD_FLAGS}")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${HIP_CLANG_BUILD_FLAGS}")
+
+    set(SOURCE_FILES_RUNTIME
+        src/code_object_bundle.cpp
+        src/hip_clang.cpp
+        src/hip_hcc.cpp
+        src/hip_context.cpp
+        src/hip_device.cpp
+        src/hip_memory.cpp
+        src/hip_device_memory.cpp
+        src/hip_error.cpp
+        src/hip_event.cpp
+        src/hip_fatbin.cpp
+        src/hip_peer.cpp
+        src/hip_stream.cpp
+        src/hip_module.cpp
+        src/hip_db.cpp
+        src/grid_launch.cpp
+        src/hip_texture.cpp
+        src/hip_surface.cpp
+        src/hip_intercept.cpp
+        src/env.cpp
+        src/h2f.cpp)
+
+    add_compile_options(-D__clang__)
+    add_compile_options(-D__HIP__)
+    add_compile_options(-D__hcc_workweek__=18370)  # workaround if not using hcc to compile
+
+    #execute_process(COMMAND ${HCC_HOME}/bin/hcc-config --ldflags OUTPUT_VARIABLE HCC_LD_FLAGS)
+    set(HCS_LD_FLAGS $ENV{HCS_LD_FLAGS})
+    set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${HCS_LD_FLAGS} -Wl,-Bsymbolic")
+    #set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} --amdgpu-target=gfx600 --amdgpu-target=gfx701 --amdgpu-target=gfx803 --amdgpu-target=gfx900 --amdgpu-target=gfx906")
+    #if(COMPILE_HIP_ATP_MARKER)
+    #    set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -L/opt/rocm/profiler/CXLActivityLogger/bin/x86_64 -lCXLActivityLogger")
+    #endif()
+    add_library(hip_clang SHARED ${SOURCE_FILES_RUNTIME})
+    #add_library(hip_clang_static STATIC ${SOURCE_FILES_RUNTIME})
+
+    #if(HIP_COMPILER STREQUAL "clang")
+    #    target_link_libraries(hip_clang PRIVATE umd_executable)
+    #    target_link_libraries(hip_clang_static PRIVATE umd_executable)
+    #endif()
+
+    #string(REPLACE " " ";" CLANG_CXX_FLAGS_LIST ${CLANG_CXX_FLAGS})
+    #foreach(TARGET hip_clang hip_clang_static)
+    #foreach(TARGET hip_clang_static)
+    #    target_include_directories(${TARGET} SYSTEM INTERFACE $<INSTALL_INTERFACE:$<INSTALL_PREFIX>/include>;${HCS_PATH}/include)
+    #endforeach()
+    #add_library(host INTERFACE)
+    #target_link_libraries(host INTERFACE hip_clang)
+    #add_library(device INTERFACE)
+
+    #if(HIP_COMPILER STREQUAL "clang")
+    #    target_link_libraries(device INTERFACE host hcc::hccrt hcc::hc_am)
+    #else()
+    #    target_link_libraries(device INTERFACE host)
+    #endif()
+
+    # Generate .hipInfo
+    #file(WRITE "${PROJECT_BINARY_DIR}/.hipInfo" ${_buildInfo})
 endif()
+
+# Generate .hipInfo
+file(WRITE "${PROJECT_BINARY_DIR}/.hipInfo" ${_buildInfo})
 
 # Generate .hipVersion
 file(WRITE "${PROJECT_BINARY_DIR}/.hipVersion" ${_versionInfo})
@@ -287,8 +380,17 @@ if(HIP_PLATFORM STREQUAL "hcc")
     install(TARGETS hip_hcc_static hip_hcc DESTINATION lib)
 
     # Install .hipInfo
-    install(FILES ${PROJECT_BINARY_DIR}/.hipInfo DESTINATION lib)
+    # install(FILES ${PROJECT_BINARY_DIR}/.hipInfo DESTINATION lib)
+elseif(HIP_PLATFORM STREQUAL "mlcc")
+    install(TARGETS hip_clang DESTINATION lib)
+    #install(TARGETS hip_clang_static DESTINATION lib)
+
+elseif(HIP_PLATFORM STREQUAL "clang")
+    install(TARGETS hip_clang_static DESTINATION lib)
+
 endif()
+# Install .hipInfo
+install(FILES ${PROJECT_BINARY_DIR}/.hipInfo DESTINATION lib)
 
 # Install .hipVersion
 install(FILES ${PROJECT_BINARY_DIR}/.hipVersion DESTINATION bin)
@@ -451,27 +553,27 @@ endif()
 # Testing steps
 #############################
 # Target: test
-set(HIP_ROOT_DIR ${CMAKE_INSTALL_PREFIX})
-set(HIP_SRC_PATH ${CMAKE_CURRENT_SOURCE_DIR})
-execute_process(COMMAND "${CMAKE_COMMAND}" -E copy_directory "${HIP_SRC_PATH}/cmake" "${HIP_ROOT_DIR}/cmake" RESULT_VARIABLE RUN_HIT ERROR_QUIET)
-if(${RUN_HIT} EQUAL 0)
-    execute_process(COMMAND "${CMAKE_COMMAND}" -E copy_directory "${HIP_SRC_PATH}/bin" "${HIP_ROOT_DIR}/bin" RESULT_VARIABLE RUN_HIT ERROR_QUIET)
-endif()
-if(${RUN_HIT} EQUAL 0)
-    set(CMAKE_MODULE_PATH "${HIP_ROOT_DIR}/cmake" ${CMAKE_MODULE_PATH})
-    include(${HIP_SRC_PATH}/tests/hit/HIT.cmake)
-
-    # Add tests
-    include_directories(${HIP_SRC_PATH}/tests/src)
-    hit_add_directory_recursive(${HIP_SRC_PATH}/tests/src "directed_tests")
-
-    # Add top-level tests to build_tests
-    add_custom_target(build_tests DEPENDS directed_tests)
-
-    # Add custom target: check
-    add_custom_target(check COMMAND "${CMAKE_COMMAND}" --build . --target test DEPENDS build_tests)
-else()
-    message(STATUS "Testing targets will not be available. To enable them please ensure that the HIP installation directory is writeable. Use -DCMAKE_INSTALL_PREFIX to specify a suitable location")
-endif()
+#set(HIP_ROOT_DIR ${CMAKE_INSTALL_PREFIX})
+#set(HIP_SRC_PATH ${CMAKE_CURRENT_SOURCE_DIR})
+#execute_process(COMMAND "${CMAKE_COMMAND}" -E copy_directory "${HIP_SRC_PATH}/cmake" "${HIP_ROOT_DIR}/cmake" RESULT_VARIABLE RUN_HIT ERROR_QUIET)
+#if(${RUN_HIT} EQUAL 0)
+#    execute_process(COMMAND "${CMAKE_COMMAND}" -E copy_directory "${HIP_SRC_PATH}/bin" "${HIP_ROOT_DIR}/bin" RESULT_VARIABLE RUN_HIT ERROR_QUIET)
+#endif()
+#if(${RUN_HIT} EQUAL 0)
+#    set(CMAKE_MODULE_PATH "${HIP_ROOT_DIR}/cmake" ${CMAKE_MODULE_PATH})
+#    include(${HIP_SRC_PATH}/tests/hit/HIT.cmake)
+#
+#    # Add tests
+#    include_directories(${HIP_SRC_PATH}/tests/src)
+#    hit_add_directory_recursive(${HIP_SRC_PATH}/tests/src "directed_tests")
+#
+#    # Add top-level tests to build_tests
+#    add_custom_target(build_tests DEPENDS directed_tests)
+#
+#    # Add custom target: check
+#    add_custom_target(check COMMAND "${CMAKE_COMMAND}" --build . --target test DEPENDS build_tests)
+#else()
+#    message(STATUS "Testing targets will not be available. To enable them please ensure that the HIP installation directory is writeable. Use -DCMAKE_INSTALL_PREFIX to specify a suitable location")
+#endif()
 
 # vim: ts=4:sw=4:expandtab:smartindent
