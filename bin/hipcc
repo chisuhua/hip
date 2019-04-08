@@ -146,6 +146,7 @@ if ($verbose & 0x2) {
 # set if user explicitly requests -stdlib=libc++. (else we default to libstdc++ for better interop with g++):
 $setStdLib = 0;  # TODO - set to 0
 
+$target_gfx600 = 0;
 $target_gfx701 = 0;
 $target_gfx801 = 0;
 $target_gfx802 = 0;
@@ -443,6 +444,11 @@ foreach $arg (@ARGV)
     }
 
     # TODO: Add support for comma separated list like HCC_AMDGPU_TARGET
+    if($arg eq '--amdgpu-target=gfx600')
+    {
+        $target_gfx600 = 1;
+        $default_amdgpu_target = 0;
+    }
     if($arg eq '--amdgpu-target=gfx701')
     {
         $target_gfx701 = 1;
@@ -513,6 +519,7 @@ foreach $arg (@ARGV)
         $setLinkType = 1;
     }
 
+    $is_source_input = 0;
     ## process linker response file for hip-clang
     ## extract object files from static library and pass them directly to
     ## hip-clang in command line.
@@ -643,28 +650,35 @@ foreach $arg (@ARGV)
             $hasC = 1;
             $needCXXFLAGS = 1;
             if ($HIP_PLATFORM eq 'clang') {
-                $toolArgs .= " -x hip"
+                #$toolArgs .= " -x hip"
+                $toolInpuArgs{$arg} .= " -x hip $arg"
             }
+            $is_source_input = 1;
         }
         if (($arg =~ /\.cu$/) or ($arg =~ /\.cuh$/) or ($arg =~ /\.hip$/)) {
             $hasCU = 1;
             $needCXXFLAGS = 1;
             if ($HIP_PLATFORM eq 'clang') {
-                $toolArgs .= " -x hip"
+                #$toolArgs .= " -x hip"
+                $toolInpuArgs{$arg} .= " -x hip $arg"
             }
+            $is_source_input = 1;
         }
+
 
         push (@inputs, $arg);
         #print "I: <$arg>\n";
     }
-    $toolArgs .= " $arg" unless $swallowArg;
+    if ($is_source_input == 0) {
+        $toolArgs .= " $arg" unless $swallowArg;
+    }
 }
 
 if($HIP_PLATFORM eq "hcc" or $HIP_PLATFORM eq "clang"){
     # No AMDGPU target specified at commandline. So look for HCC_AMDGPU_TARGET
-    if($default_amdgpu_target eq 1 and defined $ENV{HCC_AMDGPU_TARGET})
+    if($default_amdgpu_target eq 1 and defined $ENV{CLANG_AMDGPU_TARGET})
     {
-        foreach my $target (split(/,/, $ENV{HCC_AMDGPU_TARGET}))
+        foreach my $target (split(/,/, $ENV{CLANG_AMDGPU_TARGET}))
         {
             if($target eq 'gfx600')
             {
@@ -752,13 +766,24 @@ if($HIP_PLATFORM eq "hcc" or $HIP_PLATFORM eq "clang"){
         $GPU_ARCH_OPT = " --cuda-gpu-arch=";
     }
     # Handle ROCm target platform
-    if ($target_gfx701 eq 1) {
-        $GPU_ARCH_ARG = $GPU_ARCH_OPT . "gfx701";
-        $HIPLDFLAGS .= $GPU_ARCH_ARG;
+    if ($target_gfx600 eq 1) {
+        #$GPU_ARCH_ARG = $GPU_ARCH_OPT . "gfx701";
+        $GPU_ARCH_ARG = " -mcpu gfx600";
+        #$HIPLDFLAGS .= $GPU_ARCH_ARG;
         if ($HIP_PLATFORM eq 'clang') {
             $HIPCXXFLAGS .= $GPU_ARCH_ARG;;
         }
-        $HIPCXXFLAGS .= " -D__HIP_ARCH_GFX701__=1 ";
+        #$HIPCXXFLAGS .= " -D__HIP_ARCH_GFX701__=1 ";
+    }
+
+    if ($target_gfx701 eq 1) {
+        #$GPU_ARCH_ARG = $GPU_ARCH_OPT . "gfx701";
+        $GPU_ARCH_ARG = " -mcpu gfx701";
+        #$HIPLDFLAGS .= $GPU_ARCH_ARG;
+        if ($HIP_PLATFORM eq 'clang') {
+            $HIPCXXFLAGS .= $GPU_ARCH_ARG;;
+        }
+        #$HIPCXXFLAGS .= " -D__HIP_ARCH_GFX701__=1 ";
     }
     if ($target_gfx801 eq 1) {
         $GPU_ARCH_ARG = $GPU_ARCH_OPT . "gfx801";
@@ -862,28 +887,86 @@ my $CMD="$HIPCC";
 if ($needCXXFLAGS) {
     $CMD .= " $HIPCXXFLAGS";
 }
-if ($needLDFLAGS and not $compileOnly) {
-    $CMD .= " $HIPLDFLAGS";
-}
-$CMD .= " $toolArgs";
 
-if ($verbose & 0x1) {
-    print "hipcc-cmd: ", $CMD, "\n";
+$is_multiple_input = 0;
+$InputArgs = "";
+foreach $key (keys %toolInpuArgs) {
+    $is_multiple_input += 1;
+    $InputArgs = $toolInpuArgs{$key};
 }
 
-if ($printHipVersion) {
+if ($is_multiple_input <= 1) {
+    if ($needLDFLAGS and not $compileOnly) {
+       $CMD .= " $HIPLDFLAGS";
+    }
+
+    if ($is_multiple_input == 1) {
+       $CMD .= " $InputArgs";
+    }
+
+    $CMD .= " $toolArgs";
+
+    if ($verbose & 0x1) {
+        print "hipcc-cmd: ", $CMD, "\n";
+    }
+    if ($printHipVersion) {
+        if ($runCmd) {
+            print "HIP version: "
+        }
+        print $HIP_VERSION, "\n";
+    }
     if ($runCmd) {
-        print "HIP version: "
+        if ($HIP_PLATFORM eq "hcc" and exists($hipConfig{'HCC_VERSION'}) and $HCC_VERSION ne $hipConfig{'HCC_VERSION'}) {
+            print ("HIP ($HIP_PATH) was built using hcc $hipConfig{'HCC_VERSION'}, but you are using $HCC_HOME/hcc with version $HCC_VERSION from hipcc. Please rebuild HIP including cmake or update HCC_HOME variable.\n") ;
+            die unless $ENV{'HIP_IGNORE_HCC_VERSION'};
+        }
+        print ("$CMD\n") ;
+        system ("$CMD") or delete_temp_dirs () and die ();
     }
-    print $HIP_VERSION, "\n";
-}
-if ($runCmd) {
-    if ($HIP_PLATFORM eq "hcc" and exists($hipConfig{'HCC_VERSION'}) and $HCC_VERSION ne $hipConfig{'HCC_VERSION'}) {
-        print ("HIP ($HIP_PATH) was built using hcc $hipConfig{'HCC_VERSION'}, but you are using $HCC_HOME/hcc with version $HCC_VERSION from hipcc. Please rebuild HIP including cmake or update HCC_HOME variable.\n") ;
-        die unless $ENV{'HIP_IGNORE_HCC_VERSION'};
-    }
-    print ("$CMD\n") ;
-    system ("$CMD") or delete_temp_dirs () and die ();
-}
+} else {
+    $CMD .= " $toolArgs";
+    $LD_CMD = $CMD;
+    # TODO schi add compile for each input file due to mlcc limit
+    $CC_CMD = "$CMD -c ";
+    $CC_CMD =~ s/-o\s+\S+//;
 
+    $LD_input = "";
+
+
+    foreach $key (keys %toolInpuArgs) {
+        $CMD = $CC_CMD;
+        $CMD .= $toolInpuArgs{$key};
+
+        $key =~ s/\.(cpp|c|cc|cu|cuh|hip)$/\.o/;
+        $CMD .= " -o $key";
+        $LD_input .= " $key ";
+
+        if ($verbose & 0x1) {
+            print "hipcc-cmd: ", $CMD, "\n";
+        }
+    
+        if ($printHipVersion) {
+            if ($runCmd) {
+                print "HIP version: "
+            }
+            print $HIP_VERSION, "\n";
+        }
+        if ($runCmd) {
+            if ($HIP_PLATFORM eq "hcc" and exists($hipConfig{'HCC_VERSION'}) and $HCC_VERSION ne $hipConfig{'HCC_VERSION'}) {
+                print ("HIP ($HIP_PATH) was built using hcc $hipConfig{'HCC_VERSION'}, but you are using $HCC_HOME/hcc with version $HCC_VERSION from hipcc. Please rebuild HIP including cmake or update HCC_HOME variable.\n") ;
+                die unless $ENV{'HIP_IGNORE_HCC_VERSION'};
+            }
+            print ("$CMD\n") ;
+            system ("$CMD") or delete_temp_dirs () and die ();
+        }
+    }
+
+    if ($needLDFLAGS and not $compileOnly) {
+        $LD_CMD .= " $HIPLDFLAGS";
+        $LD_CMD .= " $LD_input";
+        print ("$LD_CMD\n") ;
+        system ("$LD_CMD") or delete_temp_dirs () and die ();
+    }
+
+}
 # vim: ts=4:sw=4:expandtab:smartindent

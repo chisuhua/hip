@@ -149,6 +149,7 @@ extern "C" void __hipRegisterFunction(
     else {
       tprintf(DB_FB, "__hipRegisterFunction cannot find kernel %s for"
           " device %d\n", deviceName, deviceId);
+      abort();
     }
   }
 
