@@ -138,9 +138,12 @@ if ($HIP_COMPILER eq "clang") {
   }
 }
 
+
 if ($verbose & 0x2) {
     print ("HIP_PATH=$HIP_PATH\n");
     print ("HIP_PLATFORM=$HIP_PLATFORM\n");
+    print ("HIP_COMPILER=$HIP_COMPILER\n");
+    print ("HIP_CLANG_PATH=$HIP_CLANG_PATH\n");
 }
 
 # set if user explicitly requests -stdlib=libc++. (else we default to libstdc++ for better interop with g++):
@@ -153,16 +156,17 @@ $target_gfx802 = 0;
 $target_gfx803 = 0;
 $target_gfx900 = 0;
 $target_gfx906 = 0;
+$target_x86_64 = 0;
+$target_llvmir = 0;
 $default_amdgpu_target = 1;
 
-$DEMO_ROOT = $ENV{DEMO_ROOT};
-$DEMO_LFLAGS = $ENV{DEMO_LFLAGS};
-$DEMO_INCLUDE = $ENV{DEMO_INCLUDE};
+#$DEMO_LFLAGS = $ENV{DEMO_LFLAGS};
+#$DEMO_INCLUDE = $ENV{DEMO_INCLUDE};
+
 
 # TODO change to mlcc
-if ($HIP_PLATFORM eq "clang") {
+if ($HIP_PLATFORM eq "mlcc") {
     #$HIPCC="$HIP_CLANG_PATH/clang++";
-    #$HIPCC="$DEMO_ROOT/bin/cc.sh";
     $HIPCC="$HIP_CLANG_PATH/mlcc";
 
     # If $HIPCC clang++ is not compiled, use clang instead
@@ -174,6 +178,7 @@ if ($HIP_PLATFORM eq "clang") {
     $HIP_CLANG_VERSION = `$HIPCC --version`;
     $HIP_CLANG_VERSION=~/.*clang version ([^ ]+).*/;
     $HIP_CLANG_VERSION=$1;
+
 
     if (! defined $HIP_CLANG_INCLUDE_PATH) {
         $HIP_CLANG_INCLUDE_PATH = "$HIP_CLANG_PATH/../lib/clang/$HIP_CLANG_VERSION/include";
@@ -200,8 +205,10 @@ if ($HIP_PLATFORM eq "clang") {
     # is required.
     #$HIP_DEVLIB_FLAGS = " --hip-device-lib-path=$DEVICE_LIB_PATH";
     $HIP_DEVLIB_FLAGS = " ";
-    $HIPCXXFLAGS .= " $DEMO_INCLUDE $HIP_DEVLIB_FLAGS -std=c++11 -isystem $HIP_CLANG_INCLUDE_PATH";
-    $HIPLDFLAGS .= " $DEMO_LFLAGS $HIP_DEVLIB_FLAGS -L$HIP_LIB_PATH";
+    #$HIPCXXFLAGS .= " $DEMO_INCLUDE $HIP_DEVLIB_FLAGS -std=c++11 -isystem $HIP_CLANG_INCLUDE_PATH";
+    #$HIPLDFLAGS .= " $DEMO_LFLAGS $HIP_DEVLIB_FLAGS -L$HIP_LIB_PATH";
+    $HIPCXXFLAGS .= " $HIP_DEVLIB_FLAGS -std=c++11 -isystem $HIP_CLANG_INCLUDE_PATH";
+    $HIPLDFLAGS .= " $HIP_DEVLIB_FLAGS -L$HIP_LIB_PATH";
     if (not $isWindows) {
       $HIPLDFLAGS .= " -Wl,--rpath=$HIP_LIB_PATH";
     }
@@ -649,7 +656,7 @@ foreach $arg (@ARGV)
         if (($arg =~ /\.cpp$/) or ($arg =~ /\.c$/) or ($arg =~ /\.cc$/) ) {
             $hasC = 1;
             $needCXXFLAGS = 1;
-            if ($HIP_PLATFORM eq 'clang') {
+            if (($HIP_PLATFORM eq 'clang') or ($HIP_PLATFORM eq "mlcc")) {
                 #$toolArgs .= " -x hip"
                 $toolInpuArgs{$arg} .= " -x hip $arg"
             }
@@ -658,7 +665,7 @@ foreach $arg (@ARGV)
         if (($arg =~ /\.cu$/) or ($arg =~ /\.cuh$/) or ($arg =~ /\.hip$/)) {
             $hasCU = 1;
             $needCXXFLAGS = 1;
-            if ($HIP_PLATFORM eq 'clang') {
+            if (($HIP_PLATFORM eq 'clang') or ($HIP_PLATFORM eq "mlcc")) {
                 #$toolArgs .= " -x hip"
                 $toolInpuArgs{$arg} .= " -x hip $arg"
             }
@@ -674,11 +681,11 @@ foreach $arg (@ARGV)
     }
 }
 
-if($HIP_PLATFORM eq "hcc" or $HIP_PLATFORM eq "clang"){
+if($HIP_PLATFORM eq "hcc" or $HIP_PLATFORM eq "clang" or $HIP_PLATFORM eq "mlcc"){
     # No AMDGPU target specified at commandline. So look for HCC_AMDGPU_TARGET
-    if($default_amdgpu_target eq 1 and defined $ENV{CLANG_AMDGPU_TARGET})
+    if($default_amdgpu_target eq 1 and defined $ENV{CLANG_PPU_TARGET})
     {
-        foreach my $target (split(/,/, $ENV{CLANG_AMDGPU_TARGET}))
+        foreach my $target (split(/,/, $ENV{CLANG_PPU_TARGET}))
         {
             if($target eq 'gfx600')
             {
@@ -715,47 +722,58 @@ if($HIP_PLATFORM eq "hcc" or $HIP_PLATFORM eq "clang"){
                 $target_gfx906 = 1;
                 $default_amdgpu_target = 0;
             }
-        }
+             if($target eq 'x86_64')
+            {
+                $target_x86_64 = 1;
+                $default_amdgpu_target = 0;
+            }
+            if($target eq 'llvmir')
+            {
+                $target_llvmir = 1;
+                $default_amdgpu_target = 0;
+            }
+       }
     }
     # Else try using rocm_agent_enumerator
-    if($default_amdgpu_target eq 1)
-    {
-        $ROCM_AGENT_ENUM = "${ROCM_PATH}/bin/rocm_agent_enumerator";
-
-        my $myAgents = `${ROCM_AGENT_ENUM} -t GPU`;
-        my @agentsLine = split('\n', $myAgents);
-
-        foreach my $val (@agentsLine) {
-            if($val eq "gfx701") {
-                $target_gfx701 = 1;
-                $default_amdgpu_target = 0;
-            }
-            if($val eq "gfx801") {
-                $target_gfx801 = 1;
-                $default_amdgpu_target = 0;
-            }
-            if($val eq "gfx802") {
-                $target_gfx802 = 1;
-                $default_amdgpu_target = 0;
-            }
-            if($val eq "gfx803") {
-                $target_gfx803 = 1;
-                $default_amdgpu_target = 0;
-            }
-            if($val eq "gfx900") {
-                $target_gfx900 = 1;
-                $default_amdgpu_target = 0;
-            }
-            if($val eq "gfx906") {
-                $target_gfx906 = 1;
-                $default_amdgpu_target = 0;
-            }
-        }
-    }
+#    if($default_amdgpu_target eq 1)
+#    {
+#        $ROCM_AGENT_ENUM = "${ROCM_PATH}/bin/rocm_agent_enumerator";
+#
+#        my $myAgents = `${ROCM_AGENT_ENUM} -t GPU`;
+#        my @agentsLine = split('\n', $myAgents);
+#
+#        foreach my $val (@agentsLine) {
+#            if($val eq "gfx701") {
+#                $target_gfx701 = 1;
+#                $default_amdgpu_target = 0;
+#            }
+#            if($val eq "gfx801") {
+#                $target_gfx801 = 1;
+#                $default_amdgpu_target = 0;
+#            }
+#            if($val eq "gfx802") {
+#                $target_gfx802 = 1;
+#                $default_amdgpu_target = 0;
+#            }
+#            if($val eq "gfx803") {
+#                $target_gfx803 = 1;
+#                $default_amdgpu_target = 0;
+#            }
+#            if($val eq "gfx900") {
+#                $target_gfx900 = 1;
+#                $default_amdgpu_target = 0;
+#            }
+#            if($val eq "gfx906") {
+#                $target_gfx906 = 1;
+#                $default_amdgpu_target = 0;
+#            }
+#        }
+#    }
     # rocm_agent_enumerator failed! Throw an error and die if linking is required
     if ($default_amdgpu_target eq 1 and $compileOnly eq 0)
     {
-        print "No valid AMD GPU target was either specified or found. Please specify a valid target using --amdgpu-target=" and die();
+        #print "No valid AMD GPU target was either specified or found. Please specify a valid target using --amdgpu-target=" and die();
+        print "No valid AMD GPU target specified use pasim";
     }
 
     $ENV{HCC_EXTRA_LIBRARIES}="\n";
@@ -766,11 +784,32 @@ if($HIP_PLATFORM eq "hcc" or $HIP_PLATFORM eq "clang"){
         $GPU_ARCH_OPT = " --cuda-gpu-arch=";
     }
     # Handle ROCm target platform
+    if ($target_x86_64 eq 1) {
+        #$GPU_ARCH_ARG = $GPU_ARCH_OPT . "gfx701";
+        $GPU_ARCH_ARG = " -mcpu pasim --ppu-arch=x86-64";
+        #$HIPLDFLAGS .= $GPU_ARCH_ARG;
+        if ($HIP_PLATFORM eq 'clang' or $HIP_PLATFORM eq 'mlcc') {
+            $HIPCXXFLAGS .= $GPU_ARCH_ARG;;
+        }
+        #$HIPCXXFLAGS .= " -D__HIP_ARCH_GFX701__=1 ";
+    }
+
+    if ($target_llvmir eq 1) {
+        #$GPU_ARCH_ARG = $GPU_ARCH_OPT . "gfx701";
+        $GPU_ARCH_ARG = " -mcpu pasim --ppu-arch=llvmir";
+        #$HIPLDFLAGS .= $GPU_ARCH_ARG;
+        if ($HIP_PLATFORM eq 'clang' or $HIP_PLATFORM eq 'mlcc') {
+            $HIPCXXFLAGS .= $GPU_ARCH_ARG;;
+        }
+        #$HIPCXXFLAGS .= " -D__HIP_ARCH_GFX701__=1 ";
+    }
+
+    # Handle ROCm target platform
     if ($target_gfx600 eq 1) {
         #$GPU_ARCH_ARG = $GPU_ARCH_OPT . "gfx701";
         $GPU_ARCH_ARG = " -mcpu gfx600";
         #$HIPLDFLAGS .= $GPU_ARCH_ARG;
-        if ($HIP_PLATFORM eq 'clang') {
+        if ($HIP_PLATFORM eq 'clang' or $HIP_PLATFORM eq 'mlcc') {
             $HIPCXXFLAGS .= $GPU_ARCH_ARG;;
         }
         #$HIPCXXFLAGS .= " -D__HIP_ARCH_GFX701__=1 ";
@@ -780,7 +819,7 @@ if($HIP_PLATFORM eq "hcc" or $HIP_PLATFORM eq "clang"){
         #$GPU_ARCH_ARG = $GPU_ARCH_OPT . "gfx701";
         $GPU_ARCH_ARG = " -mcpu gfx701";
         #$HIPLDFLAGS .= $GPU_ARCH_ARG;
-        if ($HIP_PLATFORM eq 'clang') {
+        if ($HIP_PLATFORM eq 'clang' or $HIP_PLATFORM eq 'mlcc') {
             $HIPCXXFLAGS .= $GPU_ARCH_ARG;;
         }
         #$HIPCXXFLAGS .= " -D__HIP_ARCH_GFX701__=1 ";
@@ -788,7 +827,7 @@ if($HIP_PLATFORM eq "hcc" or $HIP_PLATFORM eq "clang"){
     if ($target_gfx801 eq 1) {
         $GPU_ARCH_ARG = $GPU_ARCH_OPT . "gfx801";
         $HIPLDFLAGS .= $GPU_ARCH_ARG;
-        if ($HIP_PLATFORM eq 'clang') {
+        if ($HIP_PLATFORM eq 'clang' or $HIP_PLATFORM eq 'mlcc') {
             $HIPCXXFLAGS .= $GPU_ARCH_ARG;;
         }
         $HIPCXXFLAGS .= " -D__HIP_ARCH_GFX801__=1 ";
@@ -796,7 +835,7 @@ if($HIP_PLATFORM eq "hcc" or $HIP_PLATFORM eq "clang"){
     if ($target_gfx802 eq 1) {
         $GPU_ARCH_ARG = $GPU_ARCH_OPT . "gfx802";
         $HIPLDFLAGS .= $GPU_ARCH_ARG;
-        if ($HIP_PLATFORM eq 'clang') {
+        if ($HIP_PLATFORM eq 'clang' or $HIP_PLATFORM eq 'mlcc') {
             $HIPCXXFLAGS .= $GPU_ARCH_ARG;;
         }
         $HIPCXXFLAGS .= " -D__HIP_ARCH_GFX802__=1 ";
@@ -804,7 +843,7 @@ if($HIP_PLATFORM eq "hcc" or $HIP_PLATFORM eq "clang"){
     if ($target_gfx803 eq 1) {
         $GPU_ARCH_ARG = $GPU_ARCH_OPT . "gfx803";
         $HIPLDFLAGS .= $GPU_ARCH_ARG;
-        if ($HIP_PLATFORM eq 'clang') {
+        if ($HIP_PLATFORM eq 'clang' or $HIP_PLATFORM eq 'mlcc') {
             $HIPCXXFLAGS .= $GPU_ARCH_ARG;;
         }
         $HIPCXXFLAGS .= " -D__HIP_ARCH_GFX803__=1 ";
@@ -812,7 +851,7 @@ if($HIP_PLATFORM eq "hcc" or $HIP_PLATFORM eq "clang"){
     if ($target_gfx900 eq 1) {
         $GPU_ARCH_ARG = $GPU_ARCH_OPT . "gfx900";
         $HIPLDFLAGS .= $GPU_ARCH_ARG;
-        if ($HIP_PLATFORM eq 'clang') {
+        if ($HIP_PLATFORM eq 'clang' or $HIP_PLATFORM eq 'mlcc') {
             $HIPCXXFLAGS .= $GPU_ARCH_ARG;;
         }
         $HIPCXXFLAGS .= " -D__HIP_ARCH_GFX900__=1 ";
@@ -820,7 +859,7 @@ if($HIP_PLATFORM eq "hcc" or $HIP_PLATFORM eq "clang"){
     if ($target_gfx906 eq 1) {
         $GPU_ARCH_ARG = $GPU_ARCH_OPT . "gfx906";
         $HIPLDFLAGS .= $GPU_ARCH_ARG;
-        if ($HIP_PLATFORM eq 'clang') {
+        if ($HIP_PLATFORM eq 'clang' or $HIP_PLATFORM eq 'mlcc') {
             $HIPCXXFLAGS .= $GPU_ARCH_ARG;;
         }
         $HIPCXXFLAGS .= " -D__HIP_ARCH_GFX906__=1 ";
@@ -867,11 +906,12 @@ if ($needHipHcc) {
 # Reason is that NVCC uses the file extension to determine whether to compile in CUDA mode or
 # pass-through CPP mode.
 
-if ($HIP_PLATFORM eq "clang") {
+# TODO schi add -lhip_clang
+if ($HIP_PLATFORM eq "clang" or $HIP_PLATFORM eq "mlcc") {
     if ($isWindows) {
         $HIPCXXFLAGS .= " -std=c++14 -fms-extensions -fms-compatibility";
     } else {
-        $HIPLDFLAGS .= " -lgcc_s -lgcc -lpthread -lm";
+        $HIPLDFLAGS .= " -lhip_clang -lgcc_s -lgcc -lpthread -lm";
     }
 }
 

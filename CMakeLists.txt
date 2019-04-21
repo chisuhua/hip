@@ -61,8 +61,8 @@ message(STATUS "HIP Platform: " ${HIP_PLATFORM})
 
 # Determine HIP_COMPILER
 # Either hcc or clang; default is hcc
-# TODO schi add
-set(HIP_COMPILER clang)
+# TODO schi change clang to mlcc
+set(HIP_COMPILER mlcc)
 if(NOT DEFINED HIP_COMPILER)
     if(NOT DEFINED ENV{HIP_COMPILER})
         set(HIP_COMPILER "hcc" CACHE STRING "HIP Compiler")
@@ -78,6 +78,7 @@ add_to_config(_buildInfo HIP_COMPILER)
 
 # Determine HIP_RUNTIME
 # Either HCC or VDI; default is HCC
+set(HIP_RUNTIME MLCC)
 if(NOT DEFINED ENV{HIP_RUNTIME})
     set(HIP_RUNTIME "HCC" CACHE STRING "HIP Runtime")
 else()
