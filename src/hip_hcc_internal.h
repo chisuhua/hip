@@ -29,15 +29,15 @@ THE SOFTWARE.
 #include "inc/csq_accelerator.h"
 
 // TODO schi add
-#include "inc/hcs_executable.h"
-#include "inc/hcs.h"
+#include "inc/pps_executable.h"
+#include "inc/pps.h"
 
 // #include <hc.hpp>
 // #include <hsa/hsa.h>
 #include <unordered_map>
 #include <stack>
 
-#include "inc/hcs_ext.h"
+#include "inc/pps_ext.h"
 // #include "hsa/hsa_ext_amd.h"
 // TODO schi temp for cc.sh #include "hip/hip_runtime.h"
 #include "hip_util.h"

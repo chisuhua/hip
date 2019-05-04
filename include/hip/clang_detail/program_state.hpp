@@ -40,10 +40,10 @@ THE SOFTWARE.
 // #include <hsa/hsa.h>
 // #include <hsa/hsa_ext_amd.h>
 // #include <hsa/hsa_ven_amd_loader.h>
-#include <inc/hcs_kernel_code.h>
-#include <inc/hcs.h>
-#include <inc/hcs_ext.h>
-#include <inc/hcs_ven_loader.h>
+#include <inc/pps_kernel_code.h>
+#include <inc/pps.h>
+#include <inc/pps_ext.h>
+#include <inc/pps_ven_loader.h>
 
 #include <link.h>
 
@@ -90,7 +90,7 @@ inline constexpr bool operator==(hsa_isa_t x, hsa_isa_t y) {
 namespace hip_impl {
 class Kernel_descriptor {
     std::uint64_t kernel_object_{};
-    hcs_kernel_code_t const* kernel_header_{nullptr};
+    hcs_kernel_code_t const* kernel_header_{nullptr};  // FIXME ppu's don't use hcs_kernel_code_t , so kernel_header_ is invalid
     std::string name_{};
 public:
     Kernel_descriptor() = default;

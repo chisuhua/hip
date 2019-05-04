@@ -70,8 +70,8 @@ if(NOT DEFINED HIP_COMPILER)
         set(HIP_COMPILER $ENV{HIP_COMPILER} CACHE STRING "HIP Compiler")
     endif()
 endif()
-if(NOT (HIP_COMPILER STREQUAL "hcc" OR HIP_COMPILER STREQUAL "clang"))
-    message(FATAL_ERROR "Must use HIP_COMPILER as hcc or clang")
+if(NOT (HIP_COMPILER STREQUAL "hcc" OR HIP_COMPILER STREQUAL "clang" OR HIP_COMPILER STREQUAL "mlcc"))
+    message(FATAL_ERROR "Must use HIP_COMPILER as hcc or clang or mlcc")
 endif()
 message(STATUS "HIP Compiler: " ${HIP_COMPILER})
 add_to_config(_buildInfo HIP_COMPILER)
@@ -276,8 +276,8 @@ if(HIP_PLATFORM STREQUAL "hcc")
 elseif(HIP_PLATFORM STREQUAL "mlcc")
     include_directories(${PROJECT_SOURCE_DIR}/include)
     set(HIP_CLANG_BUILD_FLAGS)
-    set(HCS_ROOT $ENV{HCS_ROOT})
-    set(HCS_LD_FLAGS $ENV{HCS_LD_FLAGS})
+    set(MLVM_INCLUDE $ENV{MLVM_INCLUDE})
+    set(MLVM_LD_FLAGS $ENV{MLVM_LD_FLAGS})
     set(MLCC_CLANG_INCLUDE_DIR ${MLCC}/lib/clang/9.0.0/include/)
     #if(COMPILE_HIP_ATP_MARKER)
     #    include_directories(/opt/rocm/profiler/CXLActivityLogger/include)
@@ -290,7 +290,7 @@ elseif(HIP_PLATFORM STREQUAL "mlcc")
 
     # Add remaining flags
     execute_process(COMMAND "${MLCC}/bin/llvm-config --cxxflags" OUTPUT_VARIABLE CLANG_CXX_FLAGS)
-    set(HIP_CLANG_BUILD_FLAGS "${HIP_CLANG_BUILD_FLAGS} -fPIC ${CLANG_CXX_FLAGS} -I${HCS_ROOT}/include -I${HCS_ROOT}/include/platform -I${HCS_ROOT}/include/executable -I${HCS_ROOT}/include/queue -I${HCS_ROOT}/include/device -I${HCS_ROOT}/include/loader -I${MLCC_CLANG_INCLUDE_DIR}")
+    set(HIP_CLANG_BUILD_FLAGS "${HIP_CLANG_BUILD_FLAGS} -fPIC ${CLANG_CXX_FLAGS} ${MLVM_INCLUDE} -I${MLCC_CLANG_INCLUDE_DIR}")
 
     # Set compiler and compiler flags
     #set(CMAKE_CXX_COMPILER "${MLCC}/bin/clang++")
@@ -326,19 +326,19 @@ elseif(HIP_PLATFORM STREQUAL "mlcc")
     add_compile_options(-D__HIP__)
     add_compile_options(-D__hcc_workweek__=18370)  # workaround if not using hcc to compile
 
+    set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -lpthread")
     #execute_process(COMMAND ${HCC_HOME}/bin/hcc-config --ldflags OUTPUT_VARIABLE HCC_LD_FLAGS)
-    set(HCS_LD_FLAGS $ENV{HCS_LD_FLAGS})
-    set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${HCS_LD_FLAGS} -Wl,-Bsymbolic")
+    set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${MLVM_LD_FLAGS} -Wl,-Bsymbolic")
     #set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} --amdgpu-target=gfx600 --amdgpu-target=gfx701 --amdgpu-target=gfx803 --amdgpu-target=gfx900 --amdgpu-target=gfx906")
     #if(COMPILE_HIP_ATP_MARKER)
     #    set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -L/opt/rocm/profiler/CXLActivityLogger/bin/x86_64 -lCXLActivityLogger")
     #endif()
     add_library(hip_clang SHARED ${SOURCE_FILES_RUNTIME})
-    #add_library(hip_clang_static STATIC ${SOURCE_FILES_RUNTIME})
+    add_library(hip_clang_static STATIC ${SOURCE_FILES_RUNTIME})
 
     #if(HIP_COMPILER STREQUAL "clang")
-    #    target_link_libraries(hip_clang PRIVATE umd_executable)
-    #    target_link_libraries(hip_clang_static PRIVATE umd_executable)
+        #target_link_libraries(hip_clang PRIVATE runtime)
+        #target_link_libraries(hip_clang_static PRIVATE umd_executable)
     #endif()
 
     #string(REPLACE " " ";" CLANG_CXX_FLAGS_LIST ${CLANG_CXX_FLAGS})
@@ -427,6 +427,13 @@ if(HIP_PLATFORM STREQUAL "hcc")
             PATH_VARS LIB_INSTALL_DIR INCLUDE_INSTALL_DIR BIN_INSTALL_DIR
             )
     elseif(HIP_COMPILER STREQUAL "clang")
+        configure_package_config_file(
+            hip-config-clang.cmake.in
+            ${CMAKE_CURRENT_BINARY_DIR}/hip-config.cmake
+            INSTALL_DESTINATION ${CONFIG_PACKAGE_INSTALL_DIR}
+            PATH_VARS LIB_INSTALL_DIR INCLUDE_INSTALL_DIR BIN_INSTALL_DIR
+            )
+    elseif(HIP_COMPILER STREQUAL "mlcc")
         configure_package_config_file(
             hip-config-clang.cmake.in
             ${CMAKE_CURRENT_BINARY_DIR}/hip-config.cmake

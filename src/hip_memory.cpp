@@ -24,9 +24,9 @@ THE SOFTWARE.
 // #include "hsa/hsa.h"
 // #include "hsa/hsa_ext_amd.h"
 #include "inc/csq_pointer.h"
-#include "inc/hcs.h"
-#include "inc/hcs_ext.h"
-#include "inc/hcs_ext_image.h"
+#include "inc/pps.h"
+#include "inc/pps_ext.h"
+#include "inc/pps_ext_image.h"
 
 
 // TODO schi temp for cc.sh  #include "hip/hip_runtime.h"

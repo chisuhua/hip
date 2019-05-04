@@ -22,9 +22,7 @@ THE SOFTWARE.
 
 #pragma once
 
-// TODO schi change
-// #include <hsa/hsa.h>
-#include <inc/hcs.h>
+#include <inc/pps.h>
 
 #include <algorithm>
 #include <cstdint>

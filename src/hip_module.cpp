@@ -35,9 +35,9 @@ THE SOFTWARE.
 #include "hip/clang_detail/texture_types.h"
 
 // TODO schi 
-#include <inc/hcs_kernel_code.h>
-#include <inc/hcs.h>
-#include <inc/hcs_ext.h>
+#include <inc/pps_kernel_code.h>
+#include <inc/pps.h>
+#include <inc/pps_ext.h>
 #include "inc/csq_pointer.h" 
 // #include <hsa/amd_hsa_kernel_code.h>
 // #include <hsa/hsa.h>

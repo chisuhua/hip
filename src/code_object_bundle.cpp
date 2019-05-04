@@ -1,6 +1,6 @@
 #include "../include/hip/clang_detail/code_object_bundle.hpp"
 
-#include <inc/hcs.h>
+#include <inc/pps.h>
 
 #include <algorithm>
 #include <cstddef>

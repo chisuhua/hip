@@ -23,8 +23,8 @@ THE SOFTWARE.
 
 // TODO schi change
 // #include <hsa/hsa.h>
-#include <inc/hcs.h>
-#include <inc/hcs_executable.h>
+#include <inc/pps.h>
+#include <inc/pps_executable.h>
 
 #include <cstdint>
 #include <functional>

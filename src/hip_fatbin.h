@@ -29,7 +29,9 @@ THE SOFTWARE.
 constexpr unsigned __hipFatMAGIC2 = 0x48495046; // "HIPF"
 
 #define CLANG_OFFLOAD_BUNDLER_MAGIC "__CLANG_OFFLOAD_BUNDLE__"
-#define AMDGCN_AMDHSA_TRIPLE "hip-amdgcn-amd-amdhsa"
+// TODO schi change 
+// #define AMDGCN_AMDHSA_TRIPLE "hip-amdgcn-amd-amdhsa"
+#define AMDGCN_AMDHSA_TRIPLE "hip-ppu-mlvm"
 
 struct __ClangOffloadBundleDesc {
   uint64_t offset;

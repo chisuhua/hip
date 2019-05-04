@@ -773,7 +773,7 @@ if($HIP_PLATFORM eq "hcc" or $HIP_PLATFORM eq "clang" or $HIP_PLATFORM eq "mlcc"
     if ($default_amdgpu_target eq 1 and $compileOnly eq 0)
     {
         #print "No valid AMD GPU target was either specified or found. Please specify a valid target using --amdgpu-target=" and die();
-        print "No valid AMD GPU target specified use pasim";
+        print "No valid AMD GPU target specified use ppu";
     }
 
     $ENV{HCC_EXTRA_LIBRARIES}="\n";
@@ -786,7 +786,7 @@ if($HIP_PLATFORM eq "hcc" or $HIP_PLATFORM eq "clang" or $HIP_PLATFORM eq "mlcc"
     # Handle ROCm target platform
     if ($target_x86_64 eq 1) {
         #$GPU_ARCH_ARG = $GPU_ARCH_OPT . "gfx701";
-        $GPU_ARCH_ARG = " -mcpu pasim --ppu-arch=x86-64";
+        $GPU_ARCH_ARG = " -mcpu ppu --ppu-arch=x86-64";
         #$HIPLDFLAGS .= $GPU_ARCH_ARG;
         if ($HIP_PLATFORM eq 'clang' or $HIP_PLATFORM eq 'mlcc') {
             $HIPCXXFLAGS .= $GPU_ARCH_ARG;;
@@ -796,7 +796,7 @@ if($HIP_PLATFORM eq "hcc" or $HIP_PLATFORM eq "clang" or $HIP_PLATFORM eq "mlcc"
 
     if ($target_llvmir eq 1) {
         #$GPU_ARCH_ARG = $GPU_ARCH_OPT . "gfx701";
-        $GPU_ARCH_ARG = " -mcpu pasim --ppu-arch=llvmir";
+        $GPU_ARCH_ARG = " -mcpu ppu --ppu-arch=llvmir";
         #$HIPLDFLAGS .= $GPU_ARCH_ARG;
         if ($HIP_PLATFORM eq 'clang' or $HIP_PLATFORM eq 'mlcc') {
             $HIPCXXFLAGS .= $GPU_ARCH_ARG;;
@@ -906,15 +906,18 @@ if ($needHipHcc) {
 # Reason is that NVCC uses the file extension to determine whether to compile in CUDA mode or
 # pass-through CPP mode.
 
-# TODO schi add -lhip_clang
-if ($HIP_PLATFORM eq "clang" or $HIP_PLATFORM eq "mlcc") {
+if ($HIP_PLATFORM eq "clang") {
     if ($isWindows) {
         $HIPCXXFLAGS .= " -std=c++14 -fms-extensions -fms-compatibility";
     } else {
-        $HIPLDFLAGS .= " -lhip_clang -lgcc_s -lgcc -lpthread -lm";
+        $HIPLDFLAGS .= " -lgcc_s -lgcc -lpthread -lm";
     }
 }
 
+# TODO schi add -lhip_clang
+if ($HIP_PLATFORM eq "mlcc") {
+    $HIPLDFLAGS .= " -lhip_clang -lpthread "; # $ENV{MLVM_LD_FLAGS};
+}
 
 if ($HIPCC_COMPILE_FLAGS_APPEND) {
     $HIPCXXFLAGS .= " $HIPCC_COMPILE_FLAGS_APPEND";

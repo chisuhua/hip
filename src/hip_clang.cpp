@@ -74,7 +74,7 @@ __hipRegisterFatBinary(const void* data)
       hsa_agent_get_info(agent, HSA_AGENT_INFO_NAME, name);
       if (target.compare(name)) {
         // FIXME schi hack , demo use gfx803 as llvm backend target
-        if (strcmp(name, "Pasim")) {
+        if (strcmp(name, "ppu")) {
           continue;
         }
       }

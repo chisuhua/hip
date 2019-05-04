@@ -26,7 +26,7 @@ THE SOFTWARE.
 #include <hip/clang_detail/texture_types.h>
 
 // TODO schi add 
-#include "inc/hcs_ext_image.h"
+#include "inc/pps_ext_image.h"
 
 struct hipTexture {
     hipResourceDesc resDesc;

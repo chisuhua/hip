@@ -46,7 +46,7 @@ THE SOFTWARE.
 #include "inc/csq_pointer.h"
 #include "inc/runtime.h"
 
-#include "inc/hcs_ext.h"
+#include "inc/pps_ext.h"
 /*
 #include <hc.hpp>
 #include <hc_am.hpp>

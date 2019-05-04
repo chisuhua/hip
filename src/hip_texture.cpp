@@ -4,8 +4,8 @@
 #include <string.h>
 
 // TODO schi 
-#include "inc/hcs.h"
-#include "inc/hcs_ext.h"
+#include "inc/pps.h"
+#include "inc/pps_ext.h"
 // #include "hsa/hsa.h"
 // #include "hsa/hsa_ext_amd.h"
 
