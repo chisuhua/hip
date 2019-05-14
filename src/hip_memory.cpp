@@ -20,6 +20,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 */
 
+// TODO it will change hip_host_runtime_api.h to disable hipMemcpy*Symbol function define
+#define SCHI_HIP_MEMORY_COMPILE
 //TODO schi  #include <hc_am.hpp>
 // #include "hsa/hsa.h"
 // #include "hsa/hsa_ext_amd.h"
@@ -969,7 +971,8 @@ hipError_t hipHostUnregister(void* hostPtr) {
     return ihipLogStatus(hip_status);
 }
 
-namespace hip_impl {
+// TODO namespace hip_impl {
+extern "C" {
 hipError_t hipMemcpyToSymbol(void* dst, const void* src, size_t count,
                              size_t offset, hipMemcpyKind kind,
                              const char* symbol_name) {
@@ -1071,7 +1074,8 @@ hipError_t hipMemcpyFromSymbolAsync(void* dst, const void* src, size_t count,
 
     return ihipLogStatus(e);
 }
-} // Namespace hip_impl.
+}
+// } // Namespace hip_impl.
 
 //---
 hipError_t hipMemcpy(void* dst, const void* src, size_t sizeBytes, hipMemcpyKind kind) {
