@@ -568,6 +568,9 @@ void read_kernarg_metadata(
     std::unordered_map<
         std::string,
         std::vector<std::pair<std::size_t, std::size_t>>>& kernargs) {
+    // FIXME, need to change to CO_V3
+     hip_throw(std::runtime_error{
+              "this funciton is still using CodeObject V2, it need to change to V3."});
     // TODO: this is inefficient.
     auto it = find_section_if(reader, [](const ELFIO::section* x) {
         return x->get_type() == SHT_NOTE;
