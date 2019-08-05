@@ -278,7 +278,13 @@ elseif(HIP_PLATFORM STREQUAL "mlcc")
     set(HIP_CLANG_BUILD_FLAGS)
     set(MLVM_INCLUDE $ENV{MLVM_INCLUDE})
     set(MLVM_LD_FLAGS $ENV{MLVM_LD_FLAGS})
-    set(MLCC_CLANG_INCLUDE_DIR ${MLCC}/lib/clang/9.0.0/include/)
+
+    execute_process(COMMAND ${MLCC}/bin/clang --version
+        COMMAND grep version
+        COMMAND cut -d ' ' -f3
+        OUTPUT_VARIABLE CLANG_VERSION)
+
+    set(MLCC_CLANG_INCLUDE_DIR ${MLCC}/lib/clang/${CLANG_VERSION}/include/)
     #if(COMPILE_HIP_ATP_MARKER)
     #    include_directories(/opt/rocm/profiler/CXLActivityLogger/include)
     #    set(HIP_CLANG_BUILD_FLAGS "${HIP_CLANG_BUILD_FLAGS} -DCOMPILE_HIP_ATP_MARKER=1")
