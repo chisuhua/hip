@@ -59,7 +59,7 @@ THE SOFTWARE.
 #include <unordered_map>
 #include <utility>
 #include <vector>
-#include "../include/hip/clang_detail/code_object_bundle.hpp"
+// #include "../include/hip/clang_detail/code_object_bundle.hpp"
 #include "hip_fatbin.h"
 // TODO Use Pool APIs from HCC to get memory regions.
 
@@ -465,7 +465,7 @@ hipError_t ihipModuleGetFunction(hipFunction_t* func, hipModule_t hmod, const ch
 
     if (!ctx) return hipErrorInvalidContext;
 
-    *func = new ihipModuleSymbol_t;
+    // *func = new ihipModuleSymbol_t;
 
     if (!*func) return hipErrorInvalidValue;
 

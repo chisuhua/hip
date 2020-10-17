@@ -1548,7 +1548,12 @@ typedef enum ihipMemsetDataType {
     ihipMemsetDataTypeInt    = 2
 }ihipMemsetDataType;
 
-hipError_t ihipMemset(void* dst, int  value, size_t count, hipStream_t stream, enum ihipMemsetDataType copyDataType  );
+hipError_t ihipMemset(void* dst, int  value, size_t count, hipStream_t stream, enum ihipMemsetDataType copyDataType  ) {
+    hipError_t e = hipSuccess;
+    assert(0);
+};
+
+// hipError_t ihipMemset(void* dst, int  value, size_t count, hipStream_t stream, enum ihipMemsetDataType copyDataType  );
 
 hipError_t getLockedPointer(void *hostPtr, size_t dataLen, void **devicePtrPtr)
 {
