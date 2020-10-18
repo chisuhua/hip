@@ -465,7 +465,7 @@ hipError_t ihipModuleGetFunction(hipFunction_t* func, hipModule_t hmod, const ch
 
     if (!ctx) return hipErrorInvalidContext;
 
-    // *func = new ihipModuleSymbol_t;
+    *func = new ihipModuleSymbol_t;
 
     if (!*func) return hipErrorInvalidValue;
 
